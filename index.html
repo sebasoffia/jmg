@@ -6,6 +6,36 @@
   <title>jemingüey - Valida tu contenido en español</title>
   <meta name="description" content="Analiza y mejora la legibilidad de tu contenido en español. Detecta voz pasiva, adverbios débiles y oraciones largas. Gratis hasta 1,000 palabras.">
 
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-M5XZDG');</script>
+  <!-- End Google Tag Manager -->
+
+  <!-- PostHog -->
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog && window.posthog.__loaded)||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init ts ns yi rs os Qr es capture Hi calculateEventProperties hs register register_once register_for_session unregister unregister_for_session fs getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey displaySurvey cancelPendingSurvey canRenderSurvey canRenderSurveyAsync identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException startExceptionAutocapture stopExceptionAutocapture loadToolbar get_property getSessionProperty vs us createPersonProfile cs Yr ps opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing get_explicit_consent_status is_capturing clear_opt_in_out_capturing ls debug O ds getPageViewId captureTraceFeedback captureTraceMetric Vr".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_PjMaqmCiHDrOuB5xsuM1mLfExfFBNHBRlzGKTCX5Bg7', {
+        api_host: 'https://us.i.posthog.com',
+        person_profiles: 'identified_only'
+    });
+  </script>
+  <!-- End PostHog -->
+
+  <!-- Statsig -->
+  <script src="https://cdn.jsdelivr.net/npm/@statsig/js-client@3/build/statsig-js-client+session-replay+web-analytics.min.js"></script>
+  <script>
+    window.statsigClient = new window.__STATSIG__.StatsigClient(
+      'client-9wLPoB0gtq4pDhM1ItGFrtrW18yCfcs68WCXi0ZZeTE',
+      { userID: null },
+      { logLevel: 'none' }
+    );
+    window.statsigClient.initializeAsync();
+  </script>
+  <!-- End Statsig -->
+
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
@@ -242,6 +272,10 @@
 </head>
 
 <body class="bg-cream min-h-screen" x-data="jeminguey()">
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-M5XZDG"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
 
   <!-- Navigation -->
   <nav class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
@@ -1748,11 +1782,39 @@
               await this.checkSubscription();
               await this.checkAdminStatus();
               await this.loadDocuments();
+
+              // Track login in PostHog
+              if (event === 'SIGNED_IN') {
+                if (window.posthog) {
+                  posthog.identify(session.user.id, {
+                    email: session.user.email,
+                    plan: this.isPro ? 'pro' : 'free'
+                  });
+                  posthog.capture('user_login', {
+                    method: 'email',
+                    plan: this.isPro ? 'pro' : 'free'
+                  });
+                }
+                // Track in Statsig
+                if (window.statsigClient) {
+                  window.statsigClient.updateUserAsync({ userID: session.user.id, email: session.user.email });
+                  window.statsigClient.logEvent('user_login', null, { plan: this.isPro ? 'pro' : 'free' });
+                }
+                // Track in GTM dataLayer
+                window.dataLayer = window.dataLayer || [];
+                window.dataLayer.push({
+                  event: 'user_login',
+                  user_id: session.user.id,
+                  plan: this.isPro ? 'pro' : 'free'
+                });
+              }
             } else {
               this.user = null;
               this.isPro = false;
               this.isAdmin = false;
               this.documents = [];
+              // Reset PostHog on logout
+              if (window.posthog) posthog.reset();
             }
           });
 
@@ -2631,6 +2693,25 @@
           this.showPricing = false;
 
           try {
+            // Track checkout initiation
+            if (window.posthog) {
+              posthog.capture('checkout_started', {
+                plan: 'pro',
+                price: 1000,
+                currency: 'CLP'
+              });
+            }
+            if (window.statsigClient) {
+              window.statsigClient.logEvent('checkout_started', 'pro', { price: 1000, currency: 'CLP' });
+            }
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push({
+              event: 'checkout_started',
+              plan: 'pro',
+              price: 1000,
+              currency: 'CLP'
+            });
+
             // URL de suscripción de MercadoPago con el email del usuario
             // Incluimos back_url para que vuelva a nuestra app
             const backUrl = encodeURIComponent(window.location.origin + window.location.pathname + '?payment=success');
@@ -2658,6 +2739,33 @@
             this.showPaymentSuccess = true;
             this.paymentPending = true;
 
+            // Track successful payment
+            if (window.posthog) {
+              posthog.capture('payment_completed', {
+                plan: 'pro',
+                price: 1000,
+                currency: 'CLP',
+                payment_method: 'mercadopago'
+              });
+            }
+            if (window.statsigClient) {
+              window.statsigClient.logEvent('payment_completed', 'pro', { price: 1000, currency: 'CLP' });
+            }
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push({
+              event: 'purchase',
+              ecommerce: {
+                transaction_id: preapprovalId || Date.now().toString(),
+                value: 1000,
+                currency: 'CLP',
+                items: [{
+                  item_name: 'jemingüey Pro',
+                  price: 1000,
+                  quantity: 1
+                }]
+              }
+            });
+
             // Limpiar URL params
             window.history.replaceState({}, document.title, window.location.pathname);
 
@@ -2667,6 +2775,10 @@
                 await this.checkSubscription();
                 if (this.isPro) {
                   this.paymentPending = false;
+                  // Update user properties with pro status
+                  if (window.posthog) {
+                    posthog.people.set({ plan: 'pro' });
+                  }
                 }
               }
             }, 2000);
