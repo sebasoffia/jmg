@@ -2321,13 +2321,11 @@
           console.log('💾 [SAVE] Tamaño texto:', this.text.length, 'chars');
 
           try {
-            // Only save summary metrics, not all individual issues (too large for big texts)
+            // Only save minimal metrics (avoid large payloads)
             const analysisSummary = this.analysis ? {
               score: this.analysis.score,
               quality: this.analysis.quality,
-              metrics: this.analysis.metrics,
-              readingLevel: this.analysis.readingLevel,
-              summary: this.analysis.summary
+              readingLevel: this.analysis.readingLevel
             } : null;
 
             const docData = {
@@ -2338,6 +2336,9 @@
               word_count: this.wordCount,
               last_analysis: analysisSummary
             };
+
+            const payloadSize = JSON.stringify(docData).length;
+            console.log('💾 [SAVE] Payload size:', payloadSize, 'bytes');
 
             if (this.currentDocument.id) {
               // Update existing document
