@@ -561,7 +561,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   AI Editor
-                  <span class="px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded">Kimi</span>
+                  <span class="px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded">IA</span>
                 </button>
               </div>
 
@@ -646,7 +646,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                     </div>
-                    <h3 class="text-xl font-bold text-slate-800 mb-2">Mejora tu texto con Kimi AI</h3>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">Mejora tu texto con IA</h3>
                     <p class="text-slate-500 mb-6 max-w-md mx-auto">
                       Regístrate gratis para acceder al editor de IA que corrige, mejora y optimiza tu contenido automáticamente.
                     </p>
@@ -673,7 +673,7 @@
                       <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      <h3 class="text-lg font-semibold text-slate-800">Mejora tu texto con Kimi AI</h3>
+                      <h3 class="text-lg font-semibold text-slate-800">Mejora tu texto con IA</h3>
                     </div>
 
                     <div x-show="!text.trim()" class="text-center py-12 text-slate-400">
@@ -1400,7 +1400,7 @@
             <span class="text-green-500">✓</span> Documentos ilimitados
           </li>
           <li class="flex items-center gap-2 text-sm text-slate-700">
-            <span class="text-green-500">✓</span> AI Editor con Kimi K2
+            <span class="text-green-500">✓</span> AI Editor avanzado
           </li>
           <li class="flex items-center gap-2 text-sm text-slate-700">
             <span class="text-green-500">✓</span> Prompts Pro exclusivos
@@ -1535,7 +1535,7 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
           </svg>
-          <span x-text="aiLoading ? 'Mejorando con Kimi...' : 'Mejorar con Kimi AI'"></span>
+          <span x-text="aiLoading ? 'Mejorando con IA...' : 'Mejorar con IA'"></span>
         </button>
         <p class="text-xs text-slate-400 text-center mt-2">La IA reescribirá esta frase manteniendo el contexto</p>
       </div>
@@ -2977,6 +2977,8 @@
 
         // Get tooltip text with specific suggestion
         getTooltip(issue) {
+          if (!issue) return 'Revisar';
+
           const categoryLabel = this.getCategoryLabel(issue.category);
           const suggestion = this.getSuggestion(issue);
 
@@ -2990,7 +2992,7 @@
           if (suggestion) {
             return `${categoryLabel} → ${suggestion} · Click para mejorar`;
           }
-          return `${categoryLabel} · Click para mejorar con AI`;
+          return `${categoryLabel} · Click para mejorar con IA`;
         },
 
         // Get category label
