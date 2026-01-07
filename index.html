@@ -2161,25 +2161,40 @@
               throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
             }
 
-            // OPTIMIZATION: Only send problematic text fragments, not the entire text
+            // OPTIMIZATION: Send full text for context + mark specific fragments to fix
             let textToProcess = this.text;
+            let fragmentsToFix = [];
 
-            // For fix_issues prompt, extract only the problematic sentences/fragments
-            if (promptName === 'fix_issues' && this.analysis?.issues?.length > 0) {
-              const problematicFragments = this.analysis.issues
-                .filter(i => i.sentence || i.phrase || i.word)
-                .map(i => i.sentence || i.phrase || i.word)
-                .filter((v, i, a) => a.indexOf(v) === i) // unique
-                .slice(0, 10); // max 10 fragments to keep it fast
+            // Extract problematic fragments to focus on
+            if (this.analysis?.issues?.length > 0) {
+              fragmentsToFix = this.analysis.issues
+                .filter(i => i.sentence || i.phrase)
+                .map(i => ({
+                  text: i.sentence || i.phrase,
+                  type: i.category,
+                  issue: i.category === 'long_sentence' ? `Oración larga (${i.wordCount} palabras)`
+                       : i.category === 'passive' ? 'Voz pasiva'
+                       : i.category === 'adverb' ? 'Adverbio débil'
+                       : i.category === 'vague' ? 'Palabra débil'
+                       : i.category === 'filler' ? 'Muletilla'
+                       : 'Problema de estilo'
+                }))
+                .filter((v, i, a) => a.findIndex(x => x.text === v.text) === i) // unique by text
+                .slice(0, 8); // max 8 fragments
 
-              if (problematicFragments.length > 0) {
-                textToProcess = problematicFragments.join('\n\n---\n\n');
-                console.log(`Optimized: sending ${problematicFragments.length} fragments instead of full text`);
+              // Build optimized text with context + marked fragments
+              if (fragmentsToFix.length > 0) {
+                const fragmentsList = fragmentsToFix
+                  .map((f, i) => `${i + 1}. [${f.issue}]: "${f.text}"`)
+                  .join('\n');
+
+                textToProcess = `CONTEXTO DEL TEXTO:\n${this.text.substring(0, 3000)}\n\n---\n\nFRAGMENTOS A MEJORAR:\n${fragmentsList}`;
+                console.log(`Optimized: ${fragmentsToFix.length} fragments marked for improvement`);
               }
             }
 
-            // Limit text size (max 10000 chars for speed)
-            const maxChars = 10000;
+            // Limit text size (max 8000 chars for speed)
+            const maxChars = 8000;
             if (textToProcess.length > maxChars) {
               textToProcess = textToProcess.substring(0, maxChars);
               console.warn(`Text truncated to ${maxChars} chars`);
