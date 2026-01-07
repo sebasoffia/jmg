@@ -136,6 +136,13 @@ serve(async (req) => {
       )
     }
 
+    // Usar Llama 3.1 8B para respuestas rápidas
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 25000) // 25s timeout
+
+    console.log('[AI] Llamando a NVIDIA API con Llama 3.1 8B...')
+    const startTime = Date.now()
+
     const aiResponse = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -143,7 +150,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'moonshotai/kimi-k2-instruct-0905',
+        model: 'meta/llama-3.1-8b-instruct',
         messages: [
           {
             role: 'system',
@@ -154,12 +161,15 @@ serve(async (req) => {
             content: userPrompt
           }
         ],
-        temperature: 0.6,
-        top_p: 0.9,
-        max_tokens: 4096,
+        temperature: 0.7,
+        max_tokens: 512,
         stream: false
       }),
+      signal: controller.signal
     })
+
+    clearTimeout(timeoutId)
+    console.log(`[AI] Respuesta en ${Date.now() - startTime}ms`)
 
     if (!aiResponse.ok) {
       const errorData = await aiResponse.text()

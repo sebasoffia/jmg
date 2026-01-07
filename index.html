@@ -2326,6 +2326,16 @@
           console.log('💾 [SAVE] Iniciando guardado...');
           console.log('💾 [SAVE] Tamaño texto:', this.text.length, 'chars');
 
+          // Helper: timeout wrapper for Supabase operations
+          const withTimeout = (promise, ms) => {
+            return Promise.race([
+              promise,
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Timeout: operación tardó más de ' + (ms/1000) + 's')), ms)
+              )
+            ]);
+          };
+
           try {
             // Only save minimal metrics (avoid large payloads)
             const analysisSummary = this.analysis ? {
@@ -2351,10 +2361,13 @@
               console.log('💾 [SAVE] Actualizando doc:', this.currentDocument.id);
               const opStart = performance.now();
 
-              const { error } = await supabaseClient
-                .from('documents')
-                .update(docData)
-                .eq('id', this.currentDocument.id);
+              const { error } = await withTimeout(
+                supabaseClient
+                  .from('documents')
+                  .update(docData)
+                  .eq('id', this.currentDocument.id),
+                15000 // 15s timeout
+              );
 
               console.log(`💾 [SAVE] Update en ${((performance.now() - opStart) / 1000).toFixed(2)}s`);
               if (error) throw error;
@@ -2365,18 +2378,48 @@
                 this.documents[idx] = { ...this.documents[idx], ...docData, updated_at: new Date().toISOString() };
               }
             } else {
-              // Create new document (simplified insert)
+              // Create new document - usando fetch directo
               console.log('💾 [SAVE] Creando nuevo documento...');
+              console.log('💾 [SAVE] user_id:', this.user.id);
               const opStart = performance.now();
 
-              const { data, error } = await supabaseClient
-                .from('documents')
-                .insert(docData)
-                .select('id')
-                .single();
+              // Obtener token de sesión
+              const { data: sessionData } = await supabaseClient.auth.getSession();
+              const accessToken = sessionData?.session?.access_token;
+              console.log('💾 [SAVE] Token existe:', !!accessToken);
 
-              console.log(`💾 [SAVE] Insert en ${((performance.now() - opStart) / 1000).toFixed(2)}s`);
-              if (error) throw error;
+              if (!accessToken) {
+                throw new Error('No hay sesión activa');
+              }
+
+              // Usar fetch directo para diagnosticar
+              console.log('💾 [SAVE] Enviando fetch directo a Supabase...');
+              const fetchPromise = fetch(`${SUPABASE_URL}/rest/v1/documents`, {
+                method: 'POST',
+                headers: {
+                  'apikey': SUPABASE_ANON_KEY,
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json',
+                  'Prefer': 'return=representation'
+                },
+                body: JSON.stringify(docData)
+              });
+
+              const response = await withTimeout(fetchPromise, 15000);
+              console.log(`💾 [SAVE] Fetch completado en ${((performance.now() - opStart) / 1000).toFixed(2)}s`);
+              console.log('💾 [SAVE] Status:', response.status);
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error('💾 [SAVE] Error response:', errorText);
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+              }
+
+              const result = await response.json();
+              console.log('💾 [SAVE] Result:', result);
+
+              const data = Array.isArray(result) ? result[0] : result;
+              if (!data?.id) throw new Error('No se recibió ID del documento');
               this.currentDocument.id = data.id;
 
               // Add to local list
@@ -2390,7 +2433,10 @@
             console.log(`✅ [SAVE] Total: ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
           } catch (err) {
             console.error('❌ [SAVE] Error:', err);
-            alert('Error al guardar el documento');
+            const errorMsg = err.message?.includes('Timeout')
+              ? 'El guardado tardó demasiado. Intenta de nuevo.'
+              : 'Error al guardar el documento';
+            alert(errorMsg);
           } finally {
             this.savingDocument = false;
           }
