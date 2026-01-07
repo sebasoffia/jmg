@@ -2316,6 +2316,10 @@
           if (!this.user || !this.text.trim()) return;
 
           this.savingDocument = true;
+          const startTime = performance.now();
+          console.log('💾 [SAVE] Iniciando guardado...');
+          console.log('💾 [SAVE] Tamaño texto:', this.text.length, 'chars');
+
           try {
             // Only save summary metrics, not all individual issues (too large for big texts)
             const analysisSummary = this.analysis ? {
@@ -2337,11 +2341,15 @@
 
             if (this.currentDocument.id) {
               // Update existing document
+              console.log('💾 [SAVE] Actualizando doc:', this.currentDocument.id);
+              const opStart = performance.now();
+
               const { error } = await supabaseClient
                 .from('documents')
                 .update(docData)
                 .eq('id', this.currentDocument.id);
 
+              console.log(`💾 [SAVE] Update en ${((performance.now() - opStart) / 1000).toFixed(2)}s`);
               if (error) throw error;
 
               // Update local list without reloading
@@ -2351,12 +2359,16 @@
               }
             } else {
               // Create new document
+              console.log('💾 [SAVE] Creando nuevo documento...');
+              const opStart = performance.now();
+
               const { data, error } = await supabaseClient
                 .from('documents')
                 .insert(docData)
                 .select('id, created_at, updated_at')
                 .single();
 
+              console.log(`💾 [SAVE] Insert en ${((performance.now() - opStart) / 1000).toFixed(2)}s`);
               if (error) throw error;
               this.currentDocument.id = data.id;
 
@@ -2368,8 +2380,9 @@
                 updated_at: data.updated_at
               });
             }
+            console.log(`✅ [SAVE] Total: ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
           } catch (err) {
-            console.error('Error saving document:', err);
+            console.error('❌ [SAVE] Error:', err);
             alert('Error al guardar el documento');
           } finally {
             this.savingDocument = false;
