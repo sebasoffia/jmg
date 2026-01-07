@@ -2365,26 +2365,26 @@
                 this.documents[idx] = { ...this.documents[idx], ...docData, updated_at: new Date().toISOString() };
               }
             } else {
-              // Create new document
+              // Create new document (simplified insert)
               console.log('💾 [SAVE] Creando nuevo documento...');
               const opStart = performance.now();
 
               const { data, error } = await supabaseClient
                 .from('documents')
                 .insert(docData)
-                .select('id, created_at, updated_at')
+                .select('id')
                 .single();
 
               console.log(`💾 [SAVE] Insert en ${((performance.now() - opStart) / 1000).toFixed(2)}s`);
               if (error) throw error;
               this.currentDocument.id = data.id;
 
-              // Add to local list without reloading
+              // Add to local list
               this.documents.unshift({
                 ...docData,
                 id: data.id,
-                created_at: data.created_at,
-                updated_at: data.updated_at
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
               });
             }
             console.log(`✅ [SAVE] Total: ${((performance.now() - startTime) / 1000).toFixed(2)}s`);
