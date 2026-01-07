@@ -2836,6 +2836,18 @@
             if (!response.ok) {
               const errorData = await response.json();
               console.error('❌ [AI] Error response:', errorData);
+
+              // Si es error de autenticación, limpiar token y pedir re-login
+              if (response.status === 401 || errorData.code === 401) {
+                this.accessToken = null;
+                await supabaseClient.auth.signOut();
+                this.user = null;
+                alert('Tu sesión expiró. Por favor inicia sesión de nuevo.');
+                this.showAuthModal = true;
+                this.authMode = 'login';
+                return;
+              }
+
               throw new Error(errorData.error || 'Error en la respuesta');
             }
 
