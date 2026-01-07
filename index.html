@@ -748,17 +748,29 @@
                     </div>
 
                     <!-- AI Loading State -->
-                    <div x-show="aiLoading" class="flex flex-col items-center justify-center py-8 gap-3" x-data="{ elapsed: 0 }" x-init="setInterval(() => elapsed++, 1000)">
+                    <div x-show="aiLoading" class="flex flex-col items-center justify-center py-8 gap-4"
+                         x-data="{
+                           elapsed: 0,
+                           stage: 'analyzing',
+                           get currentStage() {
+                             if (this.elapsed < 3) return { icon: '🔍', text: 'Analizando texto...' };
+                             if (this.elapsed < 10) return { icon: '🧠', text: 'Deliberando mejoras...' };
+                             if (this.elapsed < 20) return { icon: '✍️', text: 'Generando sugerencias...' };
+                             return { icon: '✨', text: 'Finalizando...' };
+                           }
+                         }"
+                         x-init="setInterval(() => elapsed++, 1000)">
                       <div class="flex items-center gap-3 text-purple-600">
-                        <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <span class="text-2xl" x-text="currentStage.icon"></span>
+                        <span class="font-medium" x-text="currentStage.text"></span>
+                      </div>
+                      <div class="flex items-center gap-2 text-sm text-slate-400">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                         </svg>
-                        <span class="font-medium">Kimi AI está procesando...</span>
+                        <span x-text="elapsed + 's'"></span>
                       </div>
-                      <p class="text-sm text-slate-500">
-                        <span x-text="elapsed + 's'"></span> transcurridos
-                      </p>
                     </div>
                   </div>
 
