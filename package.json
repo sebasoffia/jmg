@@ -2,11 +2,12 @@
   "name": "jeminguey",
   "version": "1.0.0",
   "description": "Validador de contenido en español",
+  "main": "server.js",
   "scripts": {
-    "start": "npx serve -s . -l $PORT",
-    "dev": "npx serve -s . -l 3000"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
-  "dependencies": {
-    "serve": "^14.2.0"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
