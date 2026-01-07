@@ -129,7 +129,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: prompt.model || 'moonshotai/kimi-k2-thinking',
+        model: 'moonshotai/kimi-k2-instruct-0905',
         messages: [
           {
             role: 'system',
@@ -140,8 +140,10 @@ serve(async (req) => {
             content: userPrompt
           }
         ],
-        temperature: prompt.temperature || 0.7,
-        max_tokens: prompt.max_tokens || 2048,
+        temperature: 0.6,
+        top_p: 0.9,
+        max_tokens: 4096,
+        stream: false
       }),
     })
 
