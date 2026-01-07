@@ -748,7 +748,7 @@
                     </div>
 
                     <!-- AI Loading State -->
-                    <div x-show="aiLoading" class="flex flex-col items-center justify-center py-8 gap-3">
+                    <div x-show="aiLoading" class="flex flex-col items-center justify-center py-8 gap-3" x-data="{ elapsed: 0 }" x-init="setInterval(() => elapsed++, 1000)">
                       <div class="flex items-center gap-3 text-purple-600">
                         <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -756,7 +756,9 @@
                         </svg>
                         <span class="font-medium">Kimi AI está procesando...</span>
                       </div>
-                      <p class="text-sm text-slate-500">Esto puede tomar hasta 60 segundos para textos largos</p>
+                      <p class="text-sm text-slate-500">
+                        <span x-text="elapsed + 's'"></span> transcurridos
+                      </p>
                     </div>
                   </div>
 
@@ -2147,19 +2149,36 @@
               throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
             }
 
-            console.log('Calling AI function with token:', accessToken.substring(0, 20) + '...');
-
-            // Limit text size for AI processing (max ~4000 words to avoid timeouts)
-            const maxChars = 20000;
+            // OPTIMIZATION: Only send problematic text fragments, not the entire text
             let textToProcess = this.text;
-            if (textToProcess.length > maxChars) {
-              textToProcess = textToProcess.substring(0, maxChars);
-              console.warn(`Text truncated from ${this.text.length} to ${maxChars} chars for AI processing`);
+
+            // For fix_issues prompt, extract only the problematic sentences/fragments
+            if (promptName === 'fix_issues' && this.analysis?.issues?.length > 0) {
+              const problematicFragments = this.analysis.issues
+                .filter(i => i.sentence || i.phrase || i.word)
+                .map(i => i.sentence || i.phrase || i.word)
+                .filter((v, i, a) => a.indexOf(v) === i) // unique
+                .slice(0, 10); // max 10 fragments to keep it fast
+
+              if (problematicFragments.length > 0) {
+                textToProcess = problematicFragments.join('\n\n---\n\n');
+                console.log(`Optimized: sending ${problematicFragments.length} fragments instead of full text`);
+              }
             }
 
-            // Add timeout to prevent infinite waiting (60 seconds)
+            // Limit text size (max 10000 chars for speed)
+            const maxChars = 10000;
+            if (textToProcess.length > maxChars) {
+              textToProcess = textToProcess.substring(0, maxChars);
+              console.warn(`Text truncated to ${maxChars} chars`);
+            }
+
+            console.log(`AI request: ${textToProcess.length} chars, prompt: ${promptName}`);
+            const startTime = performance.now();
+
+            // Add timeout (90 seconds for longer texts)
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000);
+            const timeoutId = setTimeout(() => controller.abort(), 90000);
 
             const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-editor`, {
               method: 'POST',
@@ -2177,9 +2196,10 @@
             });
 
             clearTimeout(timeoutId);
+            const elapsedTime = ((performance.now() - startTime) / 1000).toFixed(2);
 
             const data = await response.json();
-            console.log('AI response:', response.status, data);
+            console.log(`AI response: ${response.status} in ${elapsedTime}s`, data);
 
             if (!response.ok) {
               if (data.requiresPro) {
