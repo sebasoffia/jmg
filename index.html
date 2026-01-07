@@ -2014,6 +2014,7 @@
         contentType: 'blog',
         isPro: false,
         user: null,
+        accessToken: null,
         isAdmin: false,
 
         // UI State
@@ -2114,6 +2115,7 @@
             console.log('Auth event:', event);
             if (session?.user) {
               this.user = session.user;
+              this.accessToken = session.access_token; // Guardar token para evitar getSession()
               await this.checkSubscription();
               await this.checkAdminStatus();
               await this.loadDocuments();
@@ -2383,16 +2385,15 @@
               console.log('💾 [SAVE] user_id:', this.user.id);
               const opStart = performance.now();
 
-              // Obtener token de sesión
-              const { data: sessionData } = await supabaseClient.auth.getSession();
-              const accessToken = sessionData?.session?.access_token;
+              // Usar token guardado (evita getSession que cuelga)
+              const accessToken = this.accessToken;
               console.log('💾 [SAVE] Token existe:', !!accessToken);
 
               if (!accessToken) {
-                throw new Error('No hay sesión activa');
+                throw new Error('No hay sesión activa - refresca la página');
               }
 
-              // Usar fetch directo para diagnosticar
+              // Usar fetch directo
               console.log('💾 [SAVE] Enviando fetch directo a Supabase...');
               const fetchPromise = fetch(`${SUPABASE_URL}/rest/v1/documents`, {
                 method: 'POST',
