@@ -2313,7 +2313,13 @@
         },
 
         async saveDocument() {
-          if (!this.user || !this.text.trim()) return;
+          console.log('💾 [SAVE] saveDocument() llamado');
+          console.log('💾 [SAVE] user:', !!this.user, 'text length:', this.text?.length);
+
+          if (!this.user || !this.text.trim()) {
+            console.log('💾 [SAVE] Abortado: sin user o texto vacío');
+            return;
+          }
 
           this.savingDocument = true;
           const startTime = performance.now();
