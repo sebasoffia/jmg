@@ -1,0 +1,2704 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jemingüey - Valida tu contenido en español</title>
+  <meta name="description" content="Analiza y mejora la legibilidad de tu contenido en español. Detecta voz pasiva, adverbios débiles y oraciones largas. Gratis hasta 1,000 palabras.">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+  <!-- Google Fonts: Lora for editing -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Supabase -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            'lora': ['Lora', 'Georgia', 'serif'],
+          },
+          colors: {
+            cream: '#f6f3e3',
+            brand: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Alpine.js se carga al final del body -->
+
+  <style>
+    [x-cloak] { display: none !important; }
+
+    /* Highlighting colors */
+    .highlight-long { background-color: #fef08a; } /* Amarillo */
+    .highlight-complex { background-color: #fecaca; } /* Rojo */
+    .highlight-passive { background-color: #bbf7d0; } /* Verde */
+    .highlight-adverb { background-color: #bfdbfe; } /* Azul */
+    .highlight-vague { background-color: #e9d5ff; } /* Morado */
+    .highlight-filler { background-color: #e5e7eb; } /* Gris */
+
+    mark {
+      padding: 1px 3px;
+      border-radius: 3px;
+      cursor: help;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+
+    mark:hover {
+      filter: brightness(0.9);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    /* Custom tooltip styling - compact 2 lines max */
+    mark[data-tip] {
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    mark[data-tip]:hover::after,
+    mark[data-tip]:focus::after,
+    mark[data-tip]:active::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #0f172a;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: system-ui, sans-serif;
+      line-height: 1.4;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      width: max-content;
+      max-width: 220px;
+      text-align: left;
+      pointer-events: none;
+    }
+
+    mark[data-tip]:hover::before,
+    mark[data-tip]:focus::before,
+    mark[data-tip]:active::before {
+      content: '';
+      position: absolute;
+      bottom: calc(100% + 2px);
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: #0f172a;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    /* Tooltip below when near top */
+    mark[data-tip].tooltip-bottom:hover::after,
+    mark[data-tip].tooltip-bottom:focus::after {
+      bottom: auto;
+      top: calc(100% + 8px);
+    }
+
+    mark[data-tip].tooltip-bottom:hover::before,
+    mark[data-tip].tooltip-bottom:focus::before {
+      bottom: auto;
+      top: calc(100% + 2px);
+      border-top-color: transparent;
+      border-bottom-color: #0f172a;
+    }
+
+    /* Touch device support */
+    @media (hover: none) {
+      mark[data-tip] {
+        cursor: pointer;
+      }
+    }
+
+    /* Score circle animation */
+    .score-circle {
+      transition: stroke-dashoffset 0.5s ease-in-out;
+    }
+
+    /* Editor styling with Lora font */
+    .editor-content {
+      min-height: 300px;
+      line-height: 1.9;
+      font-family: 'Lora', Georgia, serif;
+      font-size: 18px;
+    }
+
+    .editor-content:focus {
+      outline: none;
+      box-shadow: none;
+    }
+
+    textarea.editor-content {
+      background: transparent;
+    }
+
+    /* Fullscreen editor mode */
+    .fullscreen-editor {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 9999 !important;
+      background: #fefefe !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      overflow: hidden !important;
+    }
+
+    .fullscreen-editor .editor-content {
+      min-height: calc(100vh - 140px) !important;
+      max-height: calc(100vh - 140px) !important;
+      font-size: 20px;
+      padding: 2rem 4rem !important;
+    }
+
+    .fullscreen-editor .editor-header {
+      padding: 1rem 2rem !important;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    /* AI panel styling */
+    .ai-panel {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    }
+
+    .ai-suggestion {
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Document list styling */
+    .document-card {
+      transition: all 0.2s ease;
+    }
+
+    .document-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    /* Smooth scroll */
+    html { scroll-behavior: smooth; }
+
+    /* Text rotation animation */
+    .text-rotating {
+      animation: textFade 0.5s ease-in-out;
+    }
+
+    @keyframes textFade {
+      0% {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Editor transparent background */
+    .editor-transparent {
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+
+<body class="bg-cream min-h-screen" x-data="jeminguey()">
+
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+    <div class="container mx-auto px-6 py-4">
+      <div class="flex items-center justify-between">
+        <a href="#" class="text-2xl font-bold text-slate-900">
+          jemingüey
+        </a>
+        <div class="flex items-center gap-4">
+          <a href="#editor" class="text-slate-600 hover:text-slate-900 transition-colors">
+            Probar gratis
+          </a>
+
+          <!-- Logged out state -->
+          <template x-if="!user">
+            <div class="flex items-center gap-2">
+              <button
+                @click="showAuthModal = true; authMode = 'login'"
+                class="px-4 py-2 text-slate-700 hover:text-slate-900 transition-colors"
+              >
+                Iniciar sesión
+              </button>
+              <button
+                @click="showAuthModal = true; authMode = 'register'"
+                class="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+              >
+                Registrarse
+              </button>
+            </div>
+          </template>
+
+          <!-- Logged in state -->
+          <template x-if="user">
+            <div class="flex items-center gap-3">
+              <!-- Documents button -->
+              <button
+                @click="showDocuments = true"
+                class="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Documentos
+              </button>
+              <!-- Admin button (solo admins) -->
+              <button
+                x-show="isAdmin"
+                @click="showAdminPanel = true; loadAdminPrompts()"
+                class="px-3 py-1.5 text-sm text-purple-600 hover:text-purple-900 hover:bg-purple-100 rounded-lg transition-colors flex items-center gap-1"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Admin
+              </button>
+              <span class="text-sm text-slate-600" x-text="user.email"></span>
+              <span
+                x-show="isPro"
+                class="px-2 py-0.5 bg-brand-500 text-white text-xs font-bold rounded-full"
+              >PRO</span>
+              <button
+                @click="logout()"
+                class="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Salir
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Editor Section - Full Height -->
+  <section id="editor" class="pt-20 min-h-screen bg-cream">
+    <div class="container mx-auto px-4 max-w-5xl">
+
+      <!-- Hero Title -->
+      <div class="text-center py-12 md:py-16">
+        <h1 class="font-lora text-5xl md:text-6xl lg:text-7xl font-semibold text-slate-800 leading-tight">
+          Escribe contenido que <span class="text-brand-500">conecte</span>
+        </h1>
+      </div>
+
+      <!-- Content Type + Metrics Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-4 px-2">
+        <!-- Content Type Pills -->
+        <div class="flex gap-1">
+          <template x-for="(config, type) in contentTypes" :key="type">
+            <button
+              @click="contentType = type; analyze()"
+              :class="contentType === type ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'"
+              class="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+              x-text="config.name"
+            ></button>
+          </template>
+        </div>
+
+        <!-- Compact Metrics -->
+        <div class="flex items-center gap-4 text-xs">
+          <!-- Score mini -->
+          <div class="flex items-center gap-1.5">
+            <div
+              class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+              :style="'background-color:' + getScoreColor(analysis?.score || 0)"
+              x-text="analysis?.score || 0"
+            ></div>
+            <span class="text-slate-500" x-text="analysis?.quality?.label || ''"></span>
+          </div>
+
+          <!-- Readability mini -->
+          <div class="flex items-center gap-1 text-slate-500">
+            <span class="font-medium" x-text="analysis?.metrics?.fleschScore || '-'"></span>
+            <span>Flesch</span>
+          </div>
+
+          <!-- Problems mini -->
+          <div class="flex items-center gap-1">
+            <span
+              class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+              :class="(analysis?.summary?.total || 0) > 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
+              x-text="(analysis?.summary?.total || 0) + ' problemas'"
+            ></span>
+          </div>
+
+          <!-- Words -->
+          <span class="text-slate-400">
+            <span x-text="analysis?.metrics?.words || 0"></span> palabras
+          </span>
+        </div>
+      </div>
+
+      <!-- Issues Legend Bar (expandable) -->
+      <div class="mb-4 px-2" x-data="{ expanded: false }">
+        <!-- Collapsed: just colored dots with counts -->
+        <div
+          class="flex items-center justify-center gap-3 text-xs cursor-pointer py-2 hover:bg-slate-100 rounded-lg transition-colors"
+          @click="expanded = !expanded"
+        >
+          <span class="flex items-center gap-1" :class="(analysis?.summary?.byCategory?.longSentences || 0) > 0 ? 'text-slate-700' : 'text-slate-400'">
+            <span class="w-2.5 h-2.5 rounded-sm bg-yellow-300"></span>
+            <span x-text="analysis?.summary?.byCategory?.longSentences || 0"></span>
+          </span>
+          <span class="flex items-center gap-1" :class="(analysis?.summary?.byCategory?.complex || 0) > 0 ? 'text-slate-700' : 'text-slate-400'">
+            <span class="w-2.5 h-2.5 rounded-sm bg-red-300"></span>
+            <span x-text="analysis?.summary?.byCategory?.complex || 0"></span>
+          </span>
+          <span class="flex items-center gap-1" :class="(analysis?.summary?.byCategory?.passive || 0) > 0 ? 'text-slate-700' : 'text-slate-400'">
+            <span class="w-2.5 h-2.5 rounded-sm bg-green-300"></span>
+            <span x-text="analysis?.summary?.byCategory?.passive || 0"></span>
+          </span>
+          <span class="flex items-center gap-1" :class="(analysis?.summary?.byCategory?.adverbs || 0) > 0 ? 'text-slate-700' : 'text-slate-400'">
+            <span class="w-2.5 h-2.5 rounded-sm bg-blue-300"></span>
+            <span x-text="analysis?.summary?.byCategory?.adverbs || 0"></span>
+          </span>
+          <span class="flex items-center gap-1" :class="((analysis?.summary?.byCategory?.vague || 0) + (analysis?.summary?.byCategory?.intensifiers || 0)) > 0 ? 'text-slate-700' : 'text-slate-400'">
+            <span class="w-2.5 h-2.5 rounded-sm bg-purple-300"></span>
+            <span x-text="(analysis?.summary?.byCategory?.vague || 0) + (analysis?.summary?.byCategory?.intensifiers || 0)"></span>
+          </span>
+          <svg class="w-4 h-4 text-slate-400 transition-transform" :class="{ 'rotate-180': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+
+        <!-- Expanded: full legend with labels -->
+        <div x-show="expanded" x-cloak class="flex flex-wrap justify-center gap-4 text-xs text-slate-600 pt-2 pb-1 border-t border-slate-100 mt-2">
+          <span class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded highlight-long"></span>
+            Oración larga
+            <span class="font-medium text-slate-800" x-text="'(' + (analysis?.summary?.byCategory?.longSentences || 0) + ')'"></span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded highlight-complex"></span>
+            Muy compleja
+            <span class="font-medium text-slate-800" x-text="'(' + (analysis?.summary?.byCategory?.complex || 0) + ')'"></span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded highlight-passive"></span>
+            Voz pasiva
+            <span class="font-medium text-slate-800" x-text="'(' + (analysis?.summary?.byCategory?.passive || 0) + ')'"></span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded highlight-adverb"></span>
+            Adverbio
+            <span class="font-medium text-slate-800" x-text="'(' + (analysis?.summary?.byCategory?.adverbs || 0) + ')'"></span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded highlight-vague"></span>
+            Palabra débil
+            <span class="font-medium text-slate-800" x-text="'(' + ((analysis?.summary?.byCategory?.vague || 0) + (analysis?.summary?.byCategory?.intensifiers || 0)) + ')'"></span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Floating Editor Container -->
+      <div
+        class="editor-transparent rounded-2xl shadow-xl shadow-slate-300/30 overflow-hidden ring-1 ring-slate-200/50"
+        :class="{ 'fullscreen-editor': isFullscreen }"
+      >
+        <!-- Editor Header - Clean -->
+        <div class="editor-header bg-slate-50/50 px-4 py-3 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <!-- Document title -->
+            <input
+              x-show="user"
+              type="text"
+              x-model="currentDocument.title"
+              class="bg-transparent border-none text-slate-700 font-medium focus:outline-none focus:ring-0 max-w-[180px] text-sm"
+              placeholder="Sin título"
+            >
+            <span x-show="!user" class="text-sm text-slate-400">Editor</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- Save -->
+            <button
+              x-show="user"
+              @click="saveDocument()"
+              :disabled="savingDocument"
+                    class="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    <svg x-show="!savingDocument" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    <svg x-show="savingDocument" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    <span x-text="currentDocument.id ? 'Guardado' : 'Guardar'"></span>
+                  </button>
+                  <!-- Fullscreen toggle (logged in users) -->
+                  <button
+                    x-show="user"
+                    @click="toggleFullscreen()"
+                    class="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100"
+                    :title="isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'"
+                  >
+                    <svg x-show="!isFullscreen" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                    <svg x-show="isFullscreen" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <button
+                    @click="clearText()"
+                    class="text-sm text-slate-500 hover:text-slate-700"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              </div>
+
+              <!-- View Mode Tabs -->
+              <div class="flex border-b border-slate-100">
+                <button
+                  @click="viewMode = 'edit'"
+                  class="px-4 py-2 text-sm font-medium transition-colors"
+                  :class="viewMode === 'edit' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-slate-500 hover:text-slate-700'"
+                >
+                  Editar
+                </button>
+                <button
+                  @click="viewMode = 'preview'; analyze()"
+                  class="px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
+                  :class="viewMode === 'preview' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-slate-500 hover:text-slate-700'"
+                >
+                  Ver problemas
+                  <!-- Issue count badge -->
+                  <span
+                    x-show="analysis?.summary?.total > 0"
+                    x-text="analysis?.summary?.total"
+                    class="px-2 py-0.5 text-xs font-bold rounded-full animate-pulse"
+                    :class="analysis?.summary?.total > 10 ? 'bg-red-500 text-white' : analysis?.summary?.total > 5 ? 'bg-yellow-400 text-yellow-900' : 'bg-blue-500 text-white'"
+                  ></span>
+                </button>
+                <!-- AI Tab (logged in users) -->
+                <button
+                  x-show="user"
+                  @click="viewMode = 'ai'; loadAIPrompts()"
+                  class="px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
+                  :class="viewMode === 'ai' ? 'text-purple-600 border-b-2 border-purple-500' : 'text-slate-500 hover:text-slate-700'"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  AI Editor
+                  <span class="px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded">Kimi</span>
+                </button>
+              </div>
+
+              <!-- Editor Content -->
+              <div class="relative">
+                <!-- Edit Mode: Textarea -->
+                <textarea
+                  x-show="viewMode === 'edit'"
+                  x-model="text"
+                  @input="analyze()"
+                  @paste="handlePaste($event)"
+                  class="editor-content w-full p-6 text-slate-800 text-lg resize-none border-0 focus:ring-0"
+                  :class="{'opacity-50': !isPro && wordCount > 1000}"
+                  placeholder="Pega o escribe tu texto aquí..."
+                  rows="12"
+                ></textarea>
+
+                <!-- Preview Mode: Highlighted Text -->
+                <div
+                  x-show="viewMode === 'preview'"
+                  x-cloak
+                  class="editor-content w-full p-6 text-slate-800 text-lg overflow-auto"
+                  style="min-height: 300px; max-height: 500px; white-space: pre-wrap;"
+                  x-html="highlightedText"
+                ></div>
+
+                <!-- Empty State for Preview -->
+                <div
+                  x-show="viewMode === 'preview' && !text.trim()"
+                  x-cloak
+                  class="absolute inset-0 flex items-center justify-center text-slate-400"
+                >
+                  Escribe o pega texto en el tab "Editar" para ver el análisis
+                </div>
+
+                <!-- AI Mode Panel -->
+                <div
+                  x-show="viewMode === 'ai'"
+                  x-cloak
+                  class="p-6"
+                >
+                  <!-- AI Prompts Grid -->
+                  <div x-show="!aiSuggestion" class="space-y-4">
+                    <div class="flex items-center gap-2 mb-4">
+                      <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <h3 class="text-lg font-semibold text-slate-800">Mejora tu texto con Kimi AI</h3>
+                    </div>
+
+                    <div x-show="!text.trim()" class="text-center py-12 text-slate-400">
+                      <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <p>Escribe o pega texto primero</p>
+                    </div>
+
+                    <div x-show="text.trim()" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <!-- Fix Issues -->
+                      <button
+                        @click="runAIPrompt('fix_issues')"
+                        :disabled="aiLoading"
+                        class="group p-4 rounded-xl border border-slate-200 bg-white hover:border-purple-400 hover:shadow-md transition-all text-left disabled:opacity-50"
+                      >
+                        <div class="flex items-start gap-3">
+                          <div class="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-200 transition-colors">
+                            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h4 class="font-semibold text-slate-800">Corregir todo</h4>
+                            <p class="text-xs text-slate-500 mt-0.5">Arregla oraciones largas, voz pasiva y palabras débiles</p>
+                          </div>
+                        </div>
+                      </button>
+
+                      <!-- Simplify -->
+                      <button
+                        @click="runAIPrompt('simplify')"
+                        :disabled="aiLoading"
+                        class="group p-4 rounded-xl border border-slate-200 bg-white hover:border-purple-400 hover:shadow-md transition-all text-left disabled:opacity-50"
+                      >
+                        <div class="flex items-start gap-3">
+                          <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-200 transition-colors">
+                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h4 class="font-semibold text-slate-800">Simplificar</h4>
+                            <p class="text-xs text-slate-500 mt-0.5">Oraciones más cortas y vocabulario más simple</p>
+                          </div>
+                        </div>
+                      </button>
+
+                      <!-- Professional -->
+                      <button
+                        @click="runAIPrompt('professional')"
+                        :disabled="aiLoading"
+                        class="group p-4 rounded-xl border border-slate-200 bg-white hover:border-purple-400 hover:shadow-md transition-all text-left disabled:opacity-50"
+                      >
+                        <div class="flex items-start gap-3">
+                          <div class="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 group-hover:bg-slate-200 transition-colors">
+                            <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h4 class="font-semibold text-slate-800">Más profesional</h4>
+                            <p class="text-xs text-slate-500 mt-0.5">Tono formal, elimina coloquialismos</p>
+                          </div>
+                        </div>
+                      </button>
+
+                      <!-- Friendly -->
+                      <button
+                        @click="runAIPrompt('friendly')"
+                        :disabled="aiLoading"
+                        class="group p-4 rounded-xl border border-slate-200 bg-white hover:border-purple-400 hover:shadow-md transition-all text-left disabled:opacity-50"
+                      >
+                        <div class="flex items-start gap-3">
+                          <div class="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0 group-hover:bg-yellow-200 transition-colors">
+                            <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h4 class="font-semibold text-slate-800">Más cercano</h4>
+                            <p class="text-xs text-slate-500 mt-0.5">Tono cálido y conversacional</p>
+                          </div>
+                        </div>
+                      </button>
+
+                      <!-- Persuasive (PRO) -->
+                      <button
+                        @click="runAIPrompt('persuasive')"
+                        :disabled="aiLoading || (!isPro)"
+                        class="group p-4 rounded-xl border transition-all text-left disabled:opacity-50"
+                        :class="isPro ? 'border-slate-200 bg-white hover:border-purple-400 hover:shadow-md' : 'border-dashed border-slate-300 bg-slate-50'"
+                      >
+                        <div class="flex items-start gap-3">
+                          <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+                               :class="isPro ? 'bg-orange-100 group-hover:bg-orange-200' : 'bg-slate-100'">
+                            <svg class="w-5 h-5" :class="isPro ? 'text-orange-600' : 'text-slate-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div class="flex items-center gap-2">
+                              <h4 class="font-semibold" :class="isPro ? 'text-slate-800' : 'text-slate-400'">Más persuasivo</h4>
+                              <span x-show="!isPro" class="px-1.5 py-0.5 text-[10px] font-bold bg-brand-100 text-brand-600 rounded">PRO</span>
+                            </div>
+                            <p class="text-xs mt-0.5" :class="isPro ? 'text-slate-500' : 'text-slate-400'">Enfatiza beneficios, llama a la acción</p>
+                          </div>
+                        </div>
+                      </button>
+
+                      <!-- SEO Optimize (PRO) -->
+                      <button
+                        @click="runAIPrompt('seo_optimize')"
+                        :disabled="aiLoading || (!isPro)"
+                        class="group p-4 rounded-xl border transition-all text-left disabled:opacity-50"
+                        :class="isPro ? 'border-slate-200 bg-white hover:border-purple-400 hover:shadow-md' : 'border-dashed border-slate-300 bg-slate-50'"
+                      >
+                        <div class="flex items-start gap-3">
+                          <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+                               :class="isPro ? 'bg-green-100 group-hover:bg-green-200' : 'bg-slate-100'">
+                            <svg class="w-5 h-5" :class="isPro ? 'text-green-600' : 'text-slate-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div class="flex items-center gap-2">
+                              <h4 class="font-semibold" :class="isPro ? 'text-slate-800' : 'text-slate-400'">Optimizar SEO</h4>
+                              <span x-show="!isPro" class="px-1.5 py-0.5 text-[10px] font-bold bg-brand-100 text-brand-600 rounded">PRO</span>
+                            </div>
+                            <p class="text-xs mt-0.5" :class="isPro ? 'text-slate-500' : 'text-slate-400'">Estructura, keywords, legibilidad web</p>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+
+                    <!-- AI Loading State -->
+                    <div x-show="aiLoading" class="flex flex-col items-center justify-center py-8 gap-3">
+                      <div class="flex items-center gap-3 text-purple-600">
+                        <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        <span class="font-medium">Kimi AI está procesando...</span>
+                      </div>
+                      <p class="text-sm text-slate-500">Esto puede tomar hasta 60 segundos para textos largos</p>
+                    </div>
+                  </div>
+
+                  <!-- AI Suggestion Result -->
+                  <div x-show="aiSuggestion" class="ai-suggestion space-y-4">
+                    <div class="flex items-center justify-between">
+                      <h3 class="text-lg font-semibold text-slate-800">Sugerencia de AI</h3>
+                      <button
+                        @click="aiSuggestion = null"
+                        class="text-sm text-slate-500 hover:text-slate-700"
+                      >
+                        Volver
+                      </button>
+                    </div>
+
+                    <!-- Before/After comparison -->
+                    <div class="grid md:grid-cols-2 gap-4">
+                      <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+                        <h4 class="text-sm font-medium text-red-700 mb-2">Texto original</h4>
+                        <p class="text-sm text-red-900 font-lora leading-relaxed" x-text="aiSuggestion?.originalText"></p>
+                      </div>
+                      <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+                        <h4 class="text-sm font-medium text-green-700 mb-2">Texto mejorado</h4>
+                        <p class="text-sm text-green-900 font-lora leading-relaxed" x-text="aiSuggestion?.improvedText"></p>
+                      </div>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="flex gap-3">
+                      <button
+                        @click="applyAISuggestion()"
+                        class="flex-1 py-3 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 transition-colors"
+                      >
+                        Aplicar cambios
+                      </button>
+                      <button
+                        @click="aiSuggestion = null"
+                        class="px-6 py-3 border border-slate-300 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors"
+                      >
+                        Descartar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Word Limit Warning -->
+                <div
+                  x-show="!isPro && wordCount > 1000"
+                  x-cloak
+                  class="absolute inset-0 bg-white/90 flex items-center justify-center z-10"
+                >
+                  <div class="text-center p-8">
+                    <div class="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <span class="text-3xl">🔒</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-2">Límite alcanzado</h3>
+                    <p class="text-slate-600 mb-4">
+                      El plan gratuito permite hasta 1,000 palabras.<br>
+                      Tu texto tiene <span x-text="wordCount" class="font-semibold"></span> palabras.
+                    </p>
+                    <button
+                      @click="showPricing = true"
+                      class="px-6 py-3 bg-brand-500 text-white font-semibold rounded-lg hover:bg-brand-600 transition-colors"
+                    >
+                      Upgrade a Pro - $1,000 CLP/mes
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+
+          <!-- Upgrade Button for logged-in non-Pro users -->
+          <div x-show="user && !isPro" class="mt-6 text-center">
+            <button
+              @click="initMercadoPago()"
+              class="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Ser más Pro aún
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section (hidden for logged-in users) -->
+  <section id="pricing" class="py-20" x-show="!user" x-cloak>
+    <div class="container mx-auto px-6">
+      <div class="max-w-4xl mx-auto text-center">
+        <h2 class="text-3xl font-bold text-slate-900 mb-4">Planes simples</h2>
+        <p class="text-slate-600 mb-12">Empieza gratis, upgrade cuando lo necesites</p>
+
+        <div class="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto">
+          <!-- Free Plan -->
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-lg p-8">
+            <h3 class="text-xl font-bold text-slate-900 mb-2">Gratis</h3>
+            <p class="text-4xl font-bold text-slate-900 mb-6">$0</p>
+            <ul class="text-left space-y-3 mb-8">
+              <li class="flex items-center gap-2 text-slate-600">
+                <span class="text-green-500">✓</span> Hasta 1,000 palabras
+              </li>
+              <li class="flex items-center gap-2 text-slate-600">
+                <span class="text-green-500">✓</span> Análisis de legibilidad
+              </li>
+              <li class="flex items-center gap-2 text-slate-600">
+                <span class="text-green-500">✓</span> Detección de problemas
+              </li>
+              <li class="flex items-center gap-2 text-slate-400">
+                <span>✗</span> 5 análisis guardados
+              </li>
+              <li class="flex items-center gap-2 text-slate-400">
+                <span>✗</span> Sin JSON-LD
+              </li>
+            </ul>
+            <a
+              href="#editor"
+              class="block w-full py-3 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition-colors text-center"
+            >
+              Empezar gratis
+            </a>
+          </div>
+
+          <!-- Pro Plan -->
+          <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-lg p-8 text-white relative overflow-hidden">
+            <div class="absolute top-4 right-4 bg-brand-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+              Popular
+            </div>
+            <h3 class="text-xl font-bold mb-2">Pro</h3>
+            <p class="text-4xl font-bold mb-1">$1,000 <span class="text-lg font-normal text-slate-400">CLP/mes</span></p>
+            <p class="text-slate-400 text-sm mb-6">Cancela cuando quieras</p>
+            <ul class="text-left space-y-3 mb-8">
+              <li class="flex items-center gap-2">
+                <span class="text-brand-500">✓</span> Palabras ilimitadas
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="text-brand-500">✓</span> Todo lo del plan gratuito
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="text-brand-500">✓</span> Historial ilimitado
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="text-brand-500">✓</span> Generador JSON-LD
+              </li>
+              <li class="flex items-center gap-2">
+                <span class="text-brand-500">✓</span> Exportar PDF/Markdown
+              </li>
+            </ul>
+            <button
+              @click="initMercadoPago()"
+              class="w-full py-3 bg-brand-500 text-white font-semibold rounded-lg hover:bg-brand-600 transition-colors"
+            >
+              Comenzar con Pro
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="py-12 text-center">
+    <p class="text-base text-slate-900">
+      <span class="font-semibold">jemingüey</span> · © 2026 · Un ingrediente de <a href="https://cacerola.cl" target="_blank" class="font-semibold hover:text-brand-500 transition-colors">Cacerola Growth Marketing</a>
+    </p>
+  </footer>
+
+  <!-- Auth Modal -->
+  <div
+    x-show="showAuthModal"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    @keydown.escape.window="showAuthModal = false"
+  >
+    <div class="absolute inset-0 bg-black/50 z-0" @click="showAuthModal = false"></div>
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+      <button
+        @click="showAuthModal = false"
+        class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <h2 class="text-2xl font-bold text-slate-900 mb-6" x-text="authMode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'"></h2>
+
+      <!-- Error message -->
+      <div
+        x-show="authError"
+        x-cloak
+        class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"
+        x-text="authError"
+      ></div>
+
+      <form @submit.prevent="handleAuth()">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <input
+              type="email"
+              x-model="authEmail"
+              :disabled="loading"
+              class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:opacity-50"
+              placeholder="tu@email.com"
+              required
+            >
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Contraseña</label>
+            <input
+              type="password"
+              x-model="authPassword"
+              :disabled="loading"
+              class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:opacity-50"
+              placeholder="••••••••"
+              minlength="6"
+              required
+            >
+            <p x-show="authMode === 'register'" class="text-xs text-slate-500 mt-1">Mínimo 6 caracteres</p>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          :disabled="loading"
+          class="w-full mt-6 py-3 bg-brand-500 text-white font-semibold rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          <svg x-show="loading" class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span x-text="loading ? 'Procesando...' : (authMode === 'login' ? 'Iniciar sesión' : 'Crear cuenta')"></span>
+        </button>
+      </form>
+
+      <p class="mt-4 text-center text-sm text-slate-600">
+        <span x-text="authMode === 'login' ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'"></span>
+        <button
+          @click="authMode = authMode === 'login' ? 'register' : 'login'; authError = ''"
+          class="text-brand-500 font-medium hover:underline"
+          x-text="authMode === 'login' ? 'Regístrate' : 'Inicia sesión'"
+        ></button>
+      </p>
+
+      <div class="mt-6 text-center text-xs text-slate-400">
+        <p>Al registrarte aceptas nuestros términos de servicio</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pricing Modal -->
+  <div
+    x-show="showPricing"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    @keydown.escape.window="showPricing = false"
+  >
+    <div class="absolute inset-0 bg-black/50 z-0" @click="showPricing = false"></div>
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8">
+      <button
+        @click="showPricing = false"
+        class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <h2 class="text-2xl font-bold text-slate-900 mb-2">Upgrade a Pro</h2>
+      <p class="text-slate-600 mb-6">Desbloquea todas las funciones por solo $1,000 CLP/mes</p>
+
+      <div class="bg-slate-50 rounded-xl p-6 mb-6">
+        <ul class="space-y-3">
+          <li class="flex items-center gap-3">
+            <span class="text-green-500 text-lg">✓</span>
+            <span>Sin límite de palabras</span>
+          </li>
+          <li class="flex items-center gap-3">
+            <span class="text-green-500 text-lg">✓</span>
+            <span>Historial ilimitado</span>
+          </li>
+          <li class="flex items-center gap-3">
+            <span class="text-green-500 text-lg">✓</span>
+            <span>Generador de JSON-LD para SEO</span>
+          </li>
+          <li class="flex items-center gap-3">
+            <span class="text-green-500 text-lg">✓</span>
+            <span>Exportar a PDF y Markdown</span>
+          </li>
+          <li class="flex items-center gap-3">
+            <span class="text-green-500 text-lg">✓</span>
+            <span>Templates personalizados</span>
+          </li>
+        </ul>
+      </div>
+
+      <button
+        @click="initMercadoPago()"
+        class="w-full py-4 bg-brand-500 text-white font-semibold rounded-lg hover:bg-brand-600 transition-colors text-lg"
+      >
+        Pagar con MercadoPago
+      </button>
+
+      <p class="mt-4 text-center text-xs text-slate-400">
+        Cancela cuando quieras. Sin compromisos.
+      </p>
+    </div>
+  </div>
+
+  <!-- Documents Modal -->
+  <div
+    x-show="showDocuments"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    @keydown.escape.window="showDocuments = false"
+  >
+    <div class="absolute inset-0 bg-black/50 z-0" @click="showDocuments = false"></div>
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+      <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+        <h2 class="text-xl font-bold text-slate-900">Mis Documentos</h2>
+        <div class="flex items-center gap-2">
+          <button
+            @click="createNewDocument()"
+            class="px-4 py-2 bg-brand-500 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition-colors flex items-center gap-1"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Nuevo
+          </button>
+          <button
+            @click="showDocuments = false"
+            class="text-slate-400 hover:text-slate-600"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Loading state -->
+        <div x-show="loadingDocuments" class="flex items-center justify-center py-12">
+          <svg class="w-8 h-8 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+        </div>
+
+        <!-- Empty state -->
+        <div x-show="!loadingDocuments && documents.length === 0" class="text-center py-12">
+          <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h3 class="font-medium text-slate-900 mb-1">No tienes documentos</h3>
+          <p class="text-sm text-slate-500">Crea tu primer documento para empezar</p>
+        </div>
+
+        <!-- Documents list -->
+        <div x-show="!loadingDocuments && documents.length > 0" class="space-y-3">
+          <template x-for="doc in documents" :key="doc.id">
+            <div
+              class="document-card bg-white border border-slate-200 rounded-xl p-4 cursor-pointer"
+              @click="loadDocument(doc)"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <h4 class="font-medium text-slate-900 truncate" x-text="doc.title || 'Sin título'"></h4>
+                    <span
+                      x-show="doc.is_favorite"
+                      class="text-yellow-500"
+                    >★</span>
+                  </div>
+                  <div class="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                    <span x-text="doc.word_count + ' palabras'"></span>
+                    <span x-text="formatDate(doc.updated_at)"></span>
+                    <span class="px-2 py-0.5 bg-slate-100 rounded" x-text="contentTypes[doc.content_type]?.name || doc.content_type"></span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 ml-4">
+                  <button
+                    @click.stop="toggleFavorite(doc)"
+                    class="p-1.5 text-slate-400 hover:text-yellow-500 rounded-lg hover:bg-slate-100"
+                  >
+                    <svg class="w-4 h-4" :fill="doc.is_favorite ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                    </svg>
+                  </button>
+                  <button
+                    @click.stop="deleteDocument(doc)"
+                    class="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Panel Modal -->
+  <div
+    x-show="showAdminPanel"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    @keydown.escape.window="showAdminPanel = false"
+  >
+    <div class="absolute inset-0 bg-black/50 z-0" @click="showAdminPanel = false"></div>
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div class="p-6 border-b border-slate-200 flex items-center justify-between bg-purple-50">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">Panel de Administración</h2>
+          <p class="text-sm text-slate-600">Gestiona los prompts del sistema AI</p>
+        </div>
+        <button
+          @click="showAdminPanel = false"
+          class="text-slate-400 hover:text-slate-600"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Prompts List -->
+        <div class="space-y-4">
+          <template x-for="prompt in adminPrompts" :key="prompt.id">
+            <div class="border border-slate-200 rounded-xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-3">
+                  <span class="text-xl" x-text="getPromptIcon(prompt.name)"></span>
+                  <div>
+                    <h4 class="font-medium text-slate-900" x-text="getPromptLabel(prompt.name)"></h4>
+                    <p class="text-xs text-slate-500" x-text="prompt.name"></p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span
+                    :class="prompt.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'"
+                    class="px-2 py-0.5 text-xs font-medium rounded-full"
+                    x-text="prompt.is_active ? 'Activo' : 'Inactivo'"
+                  ></span>
+                  <span
+                    x-show="prompt.is_pro_only"
+                    class="px-2 py-0.5 text-xs font-medium bg-brand-100 text-brand-700 rounded-full"
+                  >PRO</span>
+                </div>
+              </div>
+
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1">Descripción</label>
+                  <input
+                    type="text"
+                    x-model="prompt.description"
+                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  >
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1">System Prompt</label>
+                  <textarea
+                    x-model="prompt.system_prompt"
+                    rows="4"
+                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  ></textarea>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Temperature</label>
+                    <input
+                      type="number"
+                      x-model="prompt.temperature"
+                      step="0.1"
+                      min="0"
+                      max="2"
+                      class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    >
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Max Tokens</label>
+                    <input
+                      type="number"
+                      x-model="prompt.max_tokens"
+                      min="100"
+                      max="8000"
+                      class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    >
+                  </div>
+                  <div class="flex items-end gap-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" x-model="prompt.is_active" class="rounded border-slate-300 text-purple-600 focus:ring-purple-500">
+                      <span class="text-sm text-slate-600">Activo</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" x-model="prompt.is_pro_only" class="rounded border-slate-300 text-brand-500 focus:ring-brand-500">
+                      <span class="text-sm text-slate-600">Solo Pro</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-3 flex justify-end">
+                <button
+                  @click="savePrompt(prompt)"
+                  class="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Guardar cambios
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payment Success Modal -->
+  <div
+    x-show="showPaymentSuccess"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    @keydown.escape.window="showPaymentSuccess = false"
+  >
+    <div class="absolute inset-0 bg-black/50 z-0" @click="showPaymentSuccess = false"></div>
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+      <button
+        @click="showPaymentSuccess = false"
+        class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <!-- Success State -->
+      <div x-show="isPro">
+        <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">¡Bienvenido a Pro!</h2>
+        <p class="text-slate-600 mb-6">Tu suscripción está activa. Ahora tienes acceso a todas las funciones.</p>
+        <ul class="text-left bg-slate-50 rounded-xl p-4 mb-6 space-y-2">
+          <li class="flex items-center gap-2 text-sm text-slate-700">
+            <span class="text-green-500">✓</span> Sin límite de palabras
+          </li>
+          <li class="flex items-center gap-2 text-sm text-slate-700">
+            <span class="text-green-500">✓</span> Documentos ilimitados
+          </li>
+          <li class="flex items-center gap-2 text-sm text-slate-700">
+            <span class="text-green-500">✓</span> AI Editor con Kimi K2
+          </li>
+          <li class="flex items-center gap-2 text-sm text-slate-700">
+            <span class="text-green-500">✓</span> Prompts Pro exclusivos
+          </li>
+        </ul>
+        <button
+          @click="showPaymentSuccess = false"
+          class="w-full py-3 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors"
+        >
+          Empezar a escribir
+        </button>
+      </div>
+
+      <!-- Pending State -->
+      <div x-show="!isPro && paymentPending">
+        <div class="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg class="w-10 h-10 text-yellow-600 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Procesando pago...</h2>
+        <p class="text-slate-600 mb-6">Estamos confirmando tu suscripción con MercadoPago. Esto puede tomar unos segundos.</p>
+        <button
+          @click="refreshSubscription()"
+          class="w-full py-3 bg-brand-500 text-white font-semibold rounded-lg hover:bg-brand-600 transition-colors"
+        >
+          Verificar estado
+        </button>
+      </div>
+
+      <!-- Manual activation needed -->
+      <div x-show="!isPro && !paymentPending">
+        <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <svg class="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">Pago recibido</h2>
+        <p class="text-slate-600 mb-6">Si completaste el pago, tu cuenta se activará en breve. Si no ves los cambios, intenta recargar la página.</p>
+        <div class="space-y-3">
+          <button
+            @click="refreshSubscription()"
+            class="w-full py-3 bg-brand-500 text-white font-semibold rounded-lg hover:bg-brand-600 transition-colors"
+          >
+            Verificar suscripción
+          </button>
+          <button
+            @click="window.location.reload()"
+            class="w-full py-3 border border-slate-300 text-slate-700 font-medium rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            Recargar página
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alpine.js App -->
+  <script>
+    // ===========================================
+    // Supabase Configuration
+    // ===========================================
+    const SUPABASE_URL = 'https://kwcfnxvzmnximesrslua.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3Y2ZueHZ6bW54aW1lc3JzbHVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MjAwMDMsImV4cCI6MjA4MzI5NjAwM30.ls3X3UrPLG8Tk5v2zYoFHBEpDe7uRYo3q_JnMGe42z4';
+
+    // MercadoPago Configuration (Production credentials)
+    const MP_PUBLIC_KEY = 'APP_USR-d63195d8-5211-412e-a57e-57b85a71c825';
+
+    // Initialize Supabase client
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ===========================================
+    // Analyzer Data (inline for demo)
+    // ===========================================
+    const ADVERBS_HIGH = [
+      'básicamente', 'realmente', 'actualmente', 'generalmente', 'simplemente',
+      'prácticamente', 'normalmente', 'totalmente', 'completamente', 'absolutamente',
+      'definitivamente', 'obviamente', 'claramente', 'ciertamente', 'seguramente'
+    ];
+
+    const VAGUE_WORDS = ['cosa', 'cosas', 'algo', 'hacer', 'bueno', 'malo', 'importante', 'interesante', 'etc', 'etc.'];
+
+    const FILLER_PHRASES = [
+      'en realidad', 'de hecho', 'como tal', 'en este sentido', 'cabe destacar que',
+      'es importante mencionar que', 'básicamente', 'obviamente', 'claramente'
+    ];
+
+    const REDUNDANT_PHRASES = {
+      'el hecho de que': 'que',
+      'con el fin de': 'para',
+      'en el momento actual': 'ahora',
+      'hacer uso de': 'usar',
+      'tomar una decisión': 'decidir',
+      'llevar a cabo': 'realizar'
+    };
+
+    // Funciones de análisis inline
+    function countWords(text) {
+      if (!text) return 0;
+      const words = text.match(/[a-záéíóúüñ]+/gi) || [];
+      return words.length;
+    }
+
+    function countSentences(text) {
+      if (!text) return 0;
+
+      // Split by line breaks to handle structure
+      const blocks = text.split(/\n+/);
+      let count = 0;
+
+      for (const block of blocks) {
+        const trimmedBlock = block.trim();
+        if (!trimmedBlock) continue;
+
+        // List items count as 1 sentence each
+        const isListItem = /^[-*•→▸►◆◇]\s/.test(trimmedBlock) ||
+                           /^\d+[.)]\s/.test(trimmedBlock) ||
+                           /^[a-zA-Z][.)]\s/.test(trimmedBlock);
+
+        // Headers count as 1 sentence each (short lines without ending punctuation)
+        const blockWords = countWords(trimmedBlock);
+        const isLikelyHeader = blockWords <= 12 && blockWords > 0 && !/[.!?]$/.test(trimmedBlock);
+
+        if (isListItem || isLikelyHeader) {
+          count += 1;
+        } else {
+          // Regular content: count by sentence-ending punctuation
+          const sentences = trimmedBlock.split(/[.!?]+/).filter(s => s.trim().length > 0);
+          count += sentences.length;
+        }
+      }
+
+      return Math.max(1, count);
+    }
+
+    function countSyllablesSpanish(word) {
+      if (!word) return 0;
+      word = word.toLowerCase();
+      const vowels = 'aeiouáéíóúü';
+      let count = 0;
+      let prevWasVowel = false;
+      for (const char of word) {
+        const isVowel = vowels.includes(char);
+        if (isVowel && !prevWasVowel) count++;
+        prevWasVowel = isVowel;
+      }
+      return Math.max(1, count);
+    }
+
+    function calculateFlesch(text) {
+      const words = countWords(text);
+      const sentences = countSentences(text);
+      if (words === 0 || sentences === 0) return 0;
+
+      let syllables = 0;
+      const wordList = text.match(/[a-záéíóúüñ]+/gi) || [];
+      for (const word of wordList) {
+        syllables += countSyllablesSpanish(word);
+      }
+
+      const score = 206.84 - (62.3 * syllables / words) - (words / sentences);
+      return Math.max(0, Math.min(100, Math.round(score * 10) / 10));
+    }
+
+    function findAdverbs(text) {
+      const results = [];
+      const regex = /\b\w+mente\b/gi;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const word = match[0].toLowerCase();
+        if (ADVERBS_HIGH.includes(word) || word.endsWith('mente')) {
+          results.push({ word: match[0], index: match.index, category: 'adverb' });
+        }
+      }
+      return results;
+    }
+
+    function findVagueWords(text) {
+      const results = [];
+      for (const word of VAGUE_WORDS) {
+        const regex = new RegExp(`\\b${word}\\b`, 'gi');
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          results.push({ word: match[0], index: match.index, category: 'vague' });
+        }
+      }
+      return results;
+    }
+
+    function findPassive(text) {
+      const results = [];
+      const regex = /\b(es|fue|será|ha sido|han sido|fueron)\s+\w+(ado|ido|to|so|cho)\b/gi;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        results.push({ phrase: match[0], index: match.index, category: 'passive' });
+      }
+      return results;
+    }
+
+    function findFillers(text) {
+      const results = [];
+      for (const filler of FILLER_PHRASES) {
+        const regex = new RegExp(`\\b${filler}\\b`, 'gi');
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          results.push({ phrase: match[0], index: match.index, category: 'filler' });
+        }
+      }
+      return results;
+    }
+
+    function findLongSentences(text, threshold = 25) {
+      const results = [];
+
+      // Split by line breaks first to preserve document structure
+      const blocks = text.split(/\n+/);
+      let charIndex = 0;
+
+      for (const block of blocks) {
+        const trimmedBlock = block.trim();
+        if (!trimmedBlock) {
+          charIndex = text.indexOf('\n', charIndex) + 1;
+          continue;
+        }
+
+        // Detect list items (bullet points or numbered)
+        const isListItem = /^[-*•→▸►◆◇]\s/.test(trimmedBlock) ||
+                           /^\d+[.)]\s/.test(trimmedBlock) ||
+                           /^[a-zA-Z][.)]\s/.test(trimmedBlock);
+
+        // Detect headers: short lines (≤12 words) that don't end with sentence punctuation
+        const blockWords = countWords(trimmedBlock);
+        const isLikelyHeader = blockWords <= 12 &&
+                               blockWords > 0 &&
+                               !/[.!?]$/.test(trimmedBlock);
+
+        // Skip list items and headers - they're structural elements, not prose
+        if (isListItem || isLikelyHeader) {
+          const blockIndex = text.indexOf(trimmedBlock, charIndex);
+          charIndex = blockIndex + trimmedBlock.length;
+          continue;
+        }
+
+        // For regular content, split by sentence-ending punctuation
+        const sentences = trimmedBlock.split(/[.!?]+/).filter(s => s.trim());
+
+        for (const sentence of sentences) {
+          const words = countWords(sentence);
+          const trimmedSentence = sentence.trim();
+          const index = text.indexOf(trimmedSentence, charIndex);
+
+          if (words > threshold) {
+            results.push({
+              sentence: trimmedSentence,
+              wordCount: words,
+              index: index >= 0 ? index : charIndex,
+              category: words > 40 ? 'complex_sentence' : 'long_sentence'
+            });
+          }
+          if (index >= 0) {
+            charIndex = index + trimmedSentence.length;
+          }
+        }
+      }
+      return results;
+    }
+
+    function analyzeContent(text, contentType = 'blog') {
+      const words = countWords(text);
+      const sentences = countSentences(text);
+      const fleschScore = calculateFlesch(text);
+
+      // Threshold por tipo de contenido
+      const thresholds = {
+        blog: 25,
+        landing: 20,
+        email: 22,
+        copy: 18
+      };
+      const threshold = thresholds[contentType] || 25;
+
+      const adverbs = findAdverbs(text);
+      const vague = findVagueWords(text);
+      const passive = findPassive(text);
+      const fillers = findFillers(text);
+      const longSentences = findLongSentences(text, threshold);
+
+      const allIssues = [...adverbs, ...vague, ...passive, ...fillers, ...longSentences];
+
+      // Calculate score
+      let score = 100;
+      score -= adverbs.length * 3;
+      score -= vague.length * 3;
+      score -= passive.length * 2;
+      score -= fillers.length * 2;
+      score -= longSentences.length * 4;
+
+      if (fleschScore < 60) score -= (60 - fleschScore) * 0.3;
+
+      score = Math.max(0, Math.min(100, Math.round(score)));
+
+      let quality;
+      if (score >= 80) quality = { level: 'excellent', label: 'Excelente', color: 'green' };
+      else if (score >= 60) quality = { level: 'good', label: 'Bueno', color: 'blue' };
+      else if (score >= 40) quality = { level: 'needs_work', label: 'Necesita mejoras', color: 'yellow' };
+      else quality = { level: 'poor', label: 'Requiere revisión', color: 'red' };
+
+      let readingLevel;
+      if (fleschScore >= 80) readingLevel = { label: 'Muy fácil', description: 'Educación básica' };
+      else if (fleschScore >= 60) readingLevel = { label: 'Fácil', description: 'Educación media' };
+      else if (fleschScore >= 40) readingLevel = { label: 'Normal', description: 'Bachillerato' };
+      else if (fleschScore >= 20) readingLevel = { label: 'Difícil', description: 'Universitario' };
+      else readingLevel = { label: 'Muy difícil', description: 'Especializado' };
+
+      return {
+        score,
+        quality,
+        metrics: {
+          words,
+          sentences,
+          fleschScore,
+          wordsPerSentence: sentences > 0 ? Math.round(words / sentences * 10) / 10 : 0,
+          readingTime: Math.max(1, Math.ceil(words / 200))
+        },
+        readingLevel,
+        issues: allIssues,
+        summary: {
+          total: allIssues.length,
+          byCategory: {
+            adverbs: adverbs.length,
+            vague: vague.length,
+            passive: passive.length,
+            fillers: fillers.length,
+            longSentences: longSentences.filter(s => s.category === 'long_sentence').length,
+            complexSentences: longSentences.filter(s => s.category === 'complex_sentence').length,
+            intensifiers: 0
+          }
+        }
+      };
+    }
+
+    // Alpine.js App
+    document.addEventListener('alpine:init', () => {
+      // Text Rotator Component
+      Alpine.data('textRotator', () => ({
+        texts: [
+          'tu blog',
+          'LinkedIn',
+          'tu sitio web',
+          'tus correos',
+          'Google Ads',
+          'Instagram'
+        ],
+        currentIndex: 0,
+        currentText: 'tu blog',
+
+        init() {
+          setInterval(() => {
+            this.currentIndex = (this.currentIndex + 1) % this.texts.length;
+            this.currentText = this.texts[this.currentIndex];
+          }, 2500);
+        }
+      }));
+
+      Alpine.data('jeminguey', () => ({
+        // State
+        text: '',
+        wordCount: 0,
+        analysis: null,
+        contentType: 'blog',
+        isPro: false,
+        user: null,
+        isAdmin: false,
+
+        // UI State
+        viewMode: 'edit',  // 'edit', 'preview', or 'ai'
+        highlightedText: '',
+        showAuthModal: false,
+        showPricing: false,
+        showDocuments: false,
+        showAdminPanel: false,
+        isFullscreen: false,
+        authMode: 'login',
+        authEmail: '',
+        authPassword: '',
+
+        // Document State
+        currentDocument: {
+          id: null,
+          title: 'Sin título',
+          content_type: 'blog'
+        },
+        documents: [],
+        loadingDocuments: false,
+        savingDocument: false,
+
+        // AI State
+        aiPrompts: [],
+        adminPrompts: [],
+        aiLoading: false,
+        aiSuggestion: null,
+
+        // Content type configs
+        contentTypes: {
+          blog: {
+            name: 'Blog Post',
+            description: 'Artículos y posts. Tolera oraciones de hasta 25 palabras. Ideal para contenido educativo o informativo.',
+            threshold: 25
+          },
+          landing: {
+            name: 'Landing Page',
+            description: 'Páginas de venta. Oraciones cortas (máx 20 palabras). El lector debe entender rápido tu propuesta.',
+            threshold: 20
+          },
+          email: {
+            name: 'Email Marketing',
+            description: 'Correos de venta. Oraciones de máx 22 palabras. Directo y personal.',
+            threshold: 22
+          },
+          copy: {
+            name: 'Copy Publicitario',
+            description: 'Anuncios y ads. Muy conciso (máx 18 palabras por oración). Cada palabra cuenta.',
+            threshold: 18
+          }
+        },
+
+        // UI Loading state
+        loading: false,
+        authError: '',
+        showPaymentSuccess: false,
+        paymentPending: false,
+
+        // Initialize
+        async init() {
+          // Check for MercadoPago return params
+          this.checkMercadoPagoReturn();
+
+          // Check Supabase session
+          const { data: { session } } = await supabaseClient.auth.getSession();
+
+          if (session?.user) {
+            this.user = session.user;
+            // Check subscription status and admin status
+            await this.checkSubscription();
+            await this.checkAdminStatus();
+            await this.loadDocuments();
+          }
+
+          // Listen for auth changes
+          supabaseClient.auth.onAuthStateChange(async (event, session) => {
+            console.log('Auth event:', event);
+            if (session?.user) {
+              this.user = session.user;
+              await this.checkSubscription();
+              await this.checkAdminStatus();
+              await this.loadDocuments();
+            } else {
+              this.user = null;
+              this.isPro = false;
+              this.isAdmin = false;
+              this.documents = [];
+            }
+          });
+
+          // Listen for Escape key to exit fullscreen
+          document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isFullscreen) {
+              this.isFullscreen = false;
+            }
+          });
+        },
+
+        // Check user subscription from Supabase
+        async checkSubscription() {
+          if (!this.user) return;
+
+          try {
+            const { data, error } = await supabaseClient
+              .from('subscriptions')
+              .select('plan, status')
+              .eq('user_id', this.user.id)
+              .single();
+
+            if (data && data.plan === 'pro' && data.status === 'active') {
+              this.isPro = true;
+            } else {
+              this.isPro = false;
+            }
+          } catch (err) {
+            console.log('No subscription found, using free plan');
+            this.isPro = false;
+          }
+        },
+
+        // Check if user is admin (silently fails if table doesn't exist)
+        async checkAdminStatus() {
+          if (!this.user) return;
+          this.isAdmin = false; // Default to false
+
+          try {
+            const { data } = await supabaseClient
+              .from('admin_users')
+              .select('role')
+              .eq('user_id', this.user.id)
+              .maybeSingle(); // Use maybeSingle to avoid error if no row found
+
+            this.isAdmin = !!data;
+          } catch {
+            // Silently ignore - table may not exist
+          }
+        },
+
+        // Toggle fullscreen mode
+        toggleFullscreen() {
+          this.isFullscreen = !this.isFullscreen;
+          if (this.isFullscreen) {
+            document.body.style.overflow = 'hidden';
+          } else {
+            document.body.style.overflow = '';
+          }
+        },
+
+        // =============================================
+        // Document Management
+        // =============================================
+
+        async loadDocuments() {
+          if (!this.user) return;
+
+          this.loadingDocuments = true;
+          try {
+            const { data, error } = await supabaseClient
+              .from('documents')
+              .select('*')
+              .eq('user_id', this.user.id)
+              .order('updated_at', { ascending: false });
+
+            if (error) throw error;
+            this.documents = data || [];
+          } catch (err) {
+            console.error('Error loading documents:', err);
+          } finally {
+            this.loadingDocuments = false;
+          }
+        },
+
+        async saveDocument() {
+          if (!this.user || !this.text.trim()) return;
+
+          this.savingDocument = true;
+          try {
+            // Only save summary metrics, not all individual issues (too large for big texts)
+            const analysisSummary = this.analysis ? {
+              score: this.analysis.score,
+              quality: this.analysis.quality,
+              metrics: this.analysis.metrics,
+              readingLevel: this.analysis.readingLevel,
+              summary: this.analysis.summary
+            } : null;
+
+            const docData = {
+              user_id: this.user.id,
+              title: this.currentDocument.title || 'Sin título',
+              content: this.text,
+              content_type: this.contentType,
+              word_count: this.wordCount,
+              last_analysis: analysisSummary
+            };
+
+            if (this.currentDocument.id) {
+              // Update existing document
+              const { error } = await supabaseClient
+                .from('documents')
+                .update(docData)
+                .eq('id', this.currentDocument.id);
+
+              if (error) throw error;
+            } else {
+              // Create new document
+              const { data, error } = await supabaseClient
+                .from('documents')
+                .insert(docData)
+                .select()
+                .single();
+
+              if (error) throw error;
+              this.currentDocument.id = data.id;
+            }
+
+            // Refresh documents list
+            await this.loadDocuments();
+          } catch (err) {
+            console.error('Error saving document:', err);
+            alert('Error al guardar el documento');
+          } finally {
+            this.savingDocument = false;
+          }
+        },
+
+        loadDocument(doc) {
+          this.currentDocument = {
+            id: doc.id,
+            title: doc.title,
+            content_type: doc.content_type
+          };
+          this.text = doc.content || '';
+          this.contentType = doc.content_type || 'blog';
+          this.showDocuments = false;
+          this.analyze();
+        },
+
+        createNewDocument() {
+          this.currentDocument = {
+            id: null,
+            title: 'Sin título',
+            content_type: 'blog'
+          };
+          this.text = '';
+          this.contentType = 'blog';
+          this.analysis = null;
+          this.highlightedText = '';
+          this.viewMode = 'edit';
+          this.showDocuments = false;
+          // Focus en el editor después de cerrar modal
+          setTimeout(() => {
+            const textarea = document.querySelector('textarea.editor-content');
+            if (textarea) {
+              textarea.focus();
+              // Scroll al editor
+              document.getElementById('editor')?.scrollIntoView({ behavior: 'smooth' });
+            }
+          }, 100);
+        },
+
+        async toggleFavorite(doc) {
+          try {
+            const { error } = await supabaseClient
+              .from('documents')
+              .update({ is_favorite: !doc.is_favorite })
+              .eq('id', doc.id);
+
+            if (error) throw error;
+            doc.is_favorite = !doc.is_favorite;
+          } catch (err) {
+            console.error('Error toggling favorite:', err);
+          }
+        },
+
+        async deleteDocument(doc) {
+          if (!confirm('¿Eliminar este documento?')) return;
+
+          try {
+            const { error } = await supabaseClient
+              .from('documents')
+              .delete()
+              .eq('id', doc.id);
+
+            if (error) throw error;
+
+            // Remove from list
+            this.documents = this.documents.filter(d => d.id !== doc.id);
+
+            // If it was the current document, reset
+            if (this.currentDocument.id === doc.id) {
+              this.createNewDocument();
+            }
+          } catch (err) {
+            console.error('Error deleting document:', err);
+            alert('Error al eliminar el documento');
+          }
+        },
+
+        formatDate(dateStr) {
+          if (!dateStr) return '';
+          const date = new Date(dateStr);
+          const now = new Date();
+          const diff = now - date;
+
+          // Less than 1 hour
+          if (diff < 3600000) {
+            const mins = Math.floor(diff / 60000);
+            return `hace ${mins} min`;
+          }
+          // Less than 24 hours
+          if (diff < 86400000) {
+            const hours = Math.floor(diff / 3600000);
+            return `hace ${hours}h`;
+          }
+          // Less than 7 days
+          if (diff < 604800000) {
+            const days = Math.floor(diff / 86400000);
+            return `hace ${days}d`;
+          }
+          // Otherwise show date
+          return date.toLocaleDateString('es-CL', { month: 'short', day: 'numeric' });
+        },
+
+        // =============================================
+        // AI Editor Functions
+        // =============================================
+
+        async loadAIPrompts() {
+          if (this.aiPrompts.length > 0) return; // Already loaded
+
+          try {
+            const { data, error } = await supabaseClient
+              .from('ai_prompts')
+              .select('*')
+              .eq('is_active', true)
+              .order('sort_order');
+
+            if (error) throw error;
+            this.aiPrompts = data || [];
+          } catch (err) {
+            console.error('Error loading AI prompts:', err);
+          }
+        },
+
+        async loadAdminPrompts() {
+          if (!this.isAdmin) return;
+
+          try {
+            const { data, error } = await supabaseClient
+              .from('ai_prompts')
+              .select('*')
+              .order('sort_order');
+
+            if (error) throw error;
+            this.adminPrompts = data || [];
+          } catch (err) {
+            console.error('Error loading admin prompts:', err);
+          }
+        },
+
+        getPromptIcon(name) {
+          const icons = {
+            'fix_issues': '🔧',
+            'simplify': '✨',
+            'professional': '💼',
+            'friendly': '😊',
+            'persuasive': '🎯',
+            'seo_optimize': '🔍'
+          };
+          return icons[name] || '🤖';
+        },
+
+        getPromptLabel(name) {
+          const labels = {
+            'fix_issues': 'Corregir problemas',
+            'simplify': 'Simplificar',
+            'professional': 'Más profesional',
+            'friendly': 'Más amigable',
+            'persuasive': 'Más persuasivo',
+            'seo_optimize': 'Optimizar SEO'
+          };
+          return labels[name] || name;
+        },
+
+        async runAIPrompt(promptName) {
+          if (!this.text.trim()) return;
+
+          // Check if Pro-only and user is not Pro
+          const prompt = this.aiPrompts.find(p => p.name === promptName);
+          if (prompt?.is_pro_only && !this.isPro) {
+            this.showPricing = true;
+            return;
+          }
+
+          this.aiLoading = true;
+          this.aiSuggestion = null;
+
+          try {
+            // Get current issues for fix_issues prompt
+            let issues = [];
+            if (promptName === 'fix_issues' && this.analysis?.issues) {
+              issues = this.analysis.issues.map(i => {
+                if (i.category === 'long_sentence') return `Oración larga (${i.wordCount} palabras)`;
+                if (i.category === 'passive') return `Voz pasiva: "${i.phrase}"`;
+                if (i.category === 'adverb') return `Adverbio débil: "${i.word}"`;
+                if (i.category === 'vague') return `Palabra débil: "${i.word}"`;
+                if (i.category === 'filler') return `Muletilla: "${i.phrase}"`;
+                return i.word || i.phrase || i.sentence;
+              });
+            }
+
+            // Obtener token de sesión
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+
+            if (!accessToken) {
+              throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
+            }
+
+            console.log('Calling AI function with token:', accessToken.substring(0, 20) + '...');
+
+            // Limit text size for AI processing (max ~4000 words to avoid timeouts)
+            const maxChars = 20000;
+            let textToProcess = this.text;
+            if (textToProcess.length > maxChars) {
+              textToProcess = textToProcess.substring(0, maxChars);
+              console.warn(`Text truncated from ${this.text.length} to ${maxChars} chars for AI processing`);
+            }
+
+            // Add timeout to prevent infinite waiting (60 seconds)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-editor`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY
+              },
+              body: JSON.stringify({
+                text: textToProcess,
+                promptName,
+                issues
+              }),
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            const data = await response.json();
+            console.log('AI response:', response.status, data);
+
+            if (!response.ok) {
+              if (data.requiresPro) {
+                this.showPricing = true;
+                return;
+              }
+              throw new Error(data.error || 'Error al procesar');
+            }
+
+            this.aiSuggestion = {
+              originalText: data.originalText,
+              improvedText: data.improvedText,
+              promptUsed: promptName
+            };
+          } catch (err) {
+            console.error('AI error:', err);
+            if (err.name === 'AbortError') {
+              alert('La solicitud tardó demasiado. Intenta con un texto más corto o inténtalo de nuevo.');
+            } else {
+              alert('Error al procesar con AI: ' + err.message);
+            }
+          } finally {
+            this.aiLoading = false;
+          }
+        },
+
+        applyAISuggestion() {
+          if (!this.aiSuggestion?.improvedText) return;
+          this.text = this.aiSuggestion.improvedText;
+          this.aiSuggestion = null;
+          this.viewMode = 'edit';
+          this.analyze();
+
+          // Auto-save if document exists
+          if (this.currentDocument.id) {
+            this.saveDocument();
+          }
+        },
+
+        // Quick fix all issues with AI
+        async fixAllWithAI() {
+          if (!this.user) {
+            this.showAuthModal = true;
+            this.authMode = 'register';
+            return;
+          }
+          // Load prompts if needed and run fix_issues
+          await this.loadAIPrompts();
+          await this.runAIPrompt('fix_issues');
+          // Switch to AI view to show result
+          if (this.aiSuggestion) {
+            this.viewMode = 'ai';
+          }
+        },
+
+        // Admin: Save prompt
+        async savePrompt(prompt) {
+          if (!this.isAdmin) return;
+
+          try {
+            const { error } = await supabaseClient
+              .from('ai_prompts')
+              .update({
+                description: prompt.description,
+                system_prompt: prompt.system_prompt,
+                temperature: prompt.temperature,
+                max_tokens: prompt.max_tokens,
+                is_active: prompt.is_active,
+                is_pro_only: prompt.is_pro_only
+              })
+              .eq('id', prompt.id);
+
+            if (error) throw error;
+            alert('Prompt guardado correctamente');
+
+            // Reload AI prompts
+            this.aiPrompts = [];
+            await this.loadAIPrompts();
+          } catch (err) {
+            console.error('Error saving prompt:', err);
+            alert('Error al guardar el prompt');
+          }
+        },
+
+        // Analyze content
+        analyze() {
+          this.wordCount = countWords(this.text);
+
+          if (!this.text.trim()) {
+            this.analysis = null;
+            this.highlightedText = '';
+            return;
+          }
+
+          // Don't analyze if over limit and not pro
+          if (!this.isPro && this.wordCount > 1000) {
+            return;
+          }
+
+          this.analysis = analyzeContent(this.text, this.contentType);
+          this.highlightedText = this.generateHighlightedText();
+          console.log('Analysis:', this.analysis); // Debug
+        },
+
+        // Generate highlighted HTML
+        generateHighlightedText() {
+          if (!this.text.trim()) {
+            return '';
+          }
+
+          // If no issues, just render markdown
+          if (!this.analysis || !this.analysis.issues || this.analysis.issues.length === 0) {
+            return this.renderMarkdown(this.text);
+          }
+
+          // Build an array of segments: either plain text or marked text
+          const text = this.text;
+          const segments = [];
+          let lastIndex = 0;
+
+          // Sort issues by index ascending
+          const sortedIssues = [...this.analysis.issues]
+            .filter(i => (i.word || i.phrase || i.sentence) && i.index >= 0)
+            .sort((a, b) => a.index - b.index);
+
+          // Remove overlapping issues (keep first occurrence)
+          const nonOverlapping = [];
+          let lastEnd = 0;
+          for (const issue of sortedIssues) {
+            if (issue.index >= lastEnd) {
+              nonOverlapping.push(issue);
+              const content = issue.word || issue.phrase || issue.sentence || '';
+              lastEnd = issue.index + content.length;
+            }
+          }
+
+          // Build segments
+          for (const issue of nonOverlapping) {
+            const content = issue.word || issue.phrase || issue.sentence || '';
+            const start = issue.index;
+            const end = start + content.length;
+
+            // Add plain text before this issue
+            if (start > lastIndex) {
+              segments.push({
+                type: 'text',
+                content: text.substring(lastIndex, start)
+              });
+            }
+
+            // Add the marked segment
+            segments.push({
+              type: 'mark',
+              content: text.substring(start, end),
+              colorClass: this.getCategoryClass(issue.category),
+              tooltip: this.getTooltip(issue)
+            });
+
+            lastIndex = end;
+          }
+
+          // Add remaining text
+          if (lastIndex < text.length) {
+            segments.push({
+              type: 'text',
+              content: text.substring(lastIndex)
+            });
+          }
+
+          // Build HTML from segments
+          let html = '';
+          for (const seg of segments) {
+            if (seg.type === 'text') {
+              html += this.renderMarkdown(seg.content);
+            } else {
+              // For marks, escape HTML but preserve line breaks
+              const escaped = seg.content
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+              html += `<mark class="${seg.colorClass}" data-tip="${seg.tooltip}">${escaped}</mark>`;
+            }
+          }
+
+          return html;
+        },
+
+        // Get CSS class for issue category
+        getCategoryClass(category) {
+          const classes = {
+            passive: 'highlight-passive',
+            adverb: 'highlight-adverb',
+            vague: 'highlight-vague',
+            intensifier: 'highlight-vague',
+            filler: 'highlight-filler',
+            long_sentence: 'highlight-long',
+            complex_sentence: 'highlight-complex'
+          };
+          return classes[category] || 'highlight-vague';
+        },
+
+        // Get tooltip text for issue
+        getTooltip(issue) {
+          const tips = {
+            passive: 'Voz pasiva - considera usar voz activa',
+            adverb: 'Adverbio - intenta ser más específico',
+            vague: 'Palabra débil - busca una alternativa más precisa',
+            intensifier: 'Intensificador - elimínalo o usa datos concretos',
+            filler: 'Muletilla - puedes eliminarlo',
+            long_sentence: `Oración larga (${issue.wordCount} palabras) - considera dividirla`,
+            complex_sentence: `Oración muy compleja (${issue.wordCount} palabras) - simplifica`
+          };
+          return tips[issue.category] || 'Revisa este texto';
+        },
+
+        // Escape HTML special characters
+        escapeHtml(text) {
+          const div = document.createElement('div');
+          div.textContent = text;
+          return div.innerHTML;
+        },
+
+        // Handle paste - convert HTML to plain text with line breaks preserved
+        handlePaste(event) {
+          // Check if there's HTML content (from Google Docs, Word, etc.)
+          const html = event.clipboardData?.getData('text/html');
+          const plainText = event.clipboardData?.getData('text/plain');
+
+          if (html) {
+            // Prevent default paste
+            event.preventDefault();
+
+            // Convert HTML to text with line breaks
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            // Process the HTML to extract text with formatting
+            let text = this.htmlToText(doc.body);
+
+            // Clean up excessive line breaks
+            text = text.replace(/\n{3,}/g, '\n\n').trim();
+
+            // Insert at cursor position or replace selection
+            const textarea = event.target;
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const before = this.text.substring(0, start);
+            const after = this.text.substring(end);
+
+            this.text = before + text + after;
+
+            // Set cursor position after pasted text
+            this.$nextTick(() => {
+              textarea.selectionStart = textarea.selectionEnd = start + text.length;
+              this.analyze();
+            });
+          } else {
+            // Plain text paste - let it happen naturally
+            setTimeout(() => {
+              this.analyze();
+            }, 100);
+          }
+        },
+
+        // Convert HTML element to plain text preserving structure
+        htmlToText(element) {
+          let text = '';
+
+          for (const node of element.childNodes) {
+            if (node.nodeType === Node.TEXT_NODE) {
+              text += node.textContent;
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+              const tag = node.tagName.toLowerCase();
+
+              // Block elements that should have line breaks
+              const blockElements = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'tr', 'br', 'hr'];
+              const listElements = ['ul', 'ol'];
+
+              if (tag === 'br') {
+                text += '\n';
+              } else if (tag === 'hr') {
+                text += '\n---\n';
+              } else if (tag === 'li') {
+                // Check if parent is ordered or unordered list
+                const parent = node.parentElement?.tagName.toLowerCase();
+                const prefix = parent === 'ol' ? '1. ' : '- ';
+                text += prefix + this.htmlToText(node) + '\n';
+              } else if (listElements.includes(tag)) {
+                text += '\n' + this.htmlToText(node);
+              } else if (blockElements.includes(tag)) {
+                const content = this.htmlToText(node);
+                if (content.trim()) {
+                  // Add heading markers for h1-h6
+                  if (tag.startsWith('h')) {
+                    const level = parseInt(tag[1]);
+                    const prefix = '#'.repeat(level) + ' ';
+                    text += '\n' + prefix + content + '\n';
+                  } else {
+                    text += content + '\n\n';
+                  }
+                }
+              } else if (tag === 'strong' || tag === 'b') {
+                text += '**' + this.htmlToText(node) + '**';
+              } else if (tag === 'em' || tag === 'i') {
+                text += '*' + this.htmlToText(node) + '*';
+              } else if (tag === 'a') {
+                const href = node.getAttribute('href');
+                const linkText = this.htmlToText(node);
+                text += href ? `[${linkText}](${href})` : linkText;
+              } else if (tag === 'table') {
+                text += '\n' + this.tableToMarkdown(node) + '\n';
+              } else {
+                text += this.htmlToText(node);
+              }
+            }
+          }
+
+          return text;
+        },
+
+        // Convert HTML table to markdown
+        tableToMarkdown(table) {
+          const rows = table.querySelectorAll('tr');
+          let markdown = '';
+          let isHeader = true;
+
+          for (const row of rows) {
+            const cells = row.querySelectorAll('td, th');
+            const cellTexts = Array.from(cells).map(c => c.textContent.trim());
+
+            markdown += '| ' + cellTexts.join(' | ') + ' |\n';
+
+            // Add separator after header row
+            if (isHeader && cells.length > 0) {
+              markdown += '| ' + cellTexts.map(() => '---').join(' | ') + ' |\n';
+              isHeader = false;
+            }
+          }
+
+          return markdown;
+        },
+
+        // Render markdown-style formatting
+        renderMarkdown(text) {
+          let html = text;
+
+          // Headers: # ## ### etc
+          html = html.replace(/^### (.+)$/gm, '<strong class="text-base text-slate-700">$1</strong>');
+          html = html.replace(/^## (.+)$/gm, '<strong class="text-lg text-slate-800">$1</strong>');
+          html = html.replace(/^# (.+)$/gm, '<strong class="text-xl text-slate-900">$1</strong>');
+
+          // Bold: **text** or __text__
+          html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+          html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+          // Italic: *text* or _text_
+          html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+          html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+
+          // Unordered lists: - item or * item
+          html = html.replace(/^[-*] (.+)$/gm, '<span class="ml-4">• $1</span>');
+
+          // Ordered lists: 1. item
+          html = html.replace(/^\d+\. (.+)$/gm, '<span class="ml-4">→ $1</span>');
+
+          // Horizontal rules: --- or ***
+          html = html.replace(/^(-{3,}|\*{3,})$/gm, '<hr class="my-2 border-slate-200">');
+
+          // Code inline: `code`
+          html = html.replace(/`([^`]+)`/g, '<code class="bg-slate-100 px-1 rounded text-sm">$1</code>');
+
+          // Links: [text](url) - just show text
+          html = html.replace(/\[([^\]]+)\]\([^)]+\)/g, '<span class="text-blue-600 underline">$1</span>');
+
+          // Tables: | col | col |
+          const lines = html.split('\n');
+          let inTable = false;
+          let tableHtml = '';
+          const processedLines = [];
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+              if (!inTable) {
+                inTable = true;
+                tableHtml = '<table class="border-collapse my-2 text-sm">';
+              }
+              // Skip separator lines (|---|---|)
+              if (line.includes('---')) continue;
+
+              const cells = line.split('|').filter(c => c.trim());
+              const isHeader = i === 0 || (lines[i-1] && !lines[i-1].trim().startsWith('|'));
+              const cellTag = isHeader ? 'th' : 'td';
+              const cellClass = isHeader ? 'border border-slate-300 px-2 py-1 bg-slate-100 font-semibold' : 'border border-slate-300 px-2 py-1';
+
+              tableHtml += '<tr>';
+              for (const cell of cells) {
+                tableHtml += `<${cellTag} class="${cellClass}">${cell.trim()}</${cellTag}>`;
+              }
+              tableHtml += '</tr>';
+            } else {
+              if (inTable) {
+                tableHtml += '</table>';
+                processedLines.push(tableHtml);
+                tableHtml = '';
+                inTable = false;
+              }
+              processedLines.push(line);
+            }
+          }
+          if (inTable) {
+            tableHtml += '</table>';
+            processedLines.push(tableHtml);
+          }
+
+          html = processedLines.join('\n');
+
+          // Line breaks
+          html = html.replace(/\n/g, '<br>');
+
+          return html;
+        },
+
+        // Clear text
+        clearText() {
+          this.text = '';
+          this.wordCount = 0;
+          this.analysis = null;
+          this.highlightedText = '';
+          this.viewMode = 'edit';
+        },
+
+        // Auth handler with Supabase
+        async handleAuth() {
+          this.loading = true;
+          this.authError = '';
+
+          try {
+            if (this.authMode === 'register') {
+              // Sign up
+              const { data, error } = await supabaseClient.auth.signUp({
+                email: this.authEmail,
+                password: this.authPassword,
+                options: {
+                  emailRedirectTo: window.location.origin
+                }
+              });
+
+              if (error) throw error;
+
+              if (data.user && !data.session) {
+                // Email confirmation required
+                alert('¡Cuenta creada! Revisa tu email para confirmar tu cuenta.');
+              } else if (data.session) {
+                // Auto-confirmed (for development)
+                this.user = data.user;
+                await this.checkSubscription();
+              }
+            } else {
+              // Sign in
+              const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email: this.authEmail,
+                password: this.authPassword
+              });
+
+              if (error) throw error;
+
+              this.user = data.user;
+              await this.checkSubscription();
+            }
+
+            this.showAuthModal = false;
+            this.authEmail = '';
+            this.authPassword = '';
+
+          } catch (error) {
+            console.error('Auth error:', error);
+            this.authError = error.message || 'Error de autenticación';
+
+            // Translate common errors
+            if (error.message?.includes('Invalid login credentials')) {
+              this.authError = 'Email o contraseña incorrectos';
+            } else if (error.message?.includes('User already registered')) {
+              this.authError = 'Este email ya está registrado';
+            } else if (error.message?.includes('Password should be')) {
+              this.authError = 'La contraseña debe tener al menos 6 caracteres';
+            }
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        // Logout
+        async logout() {
+          await supabaseClient.auth.signOut();
+          this.user = null;
+          this.isPro = false;
+        },
+
+        // MercadoPago subscription
+        async initMercadoPago() {
+          if (!this.user) {
+            this.showPricing = false;  // Cerrar modal de pricing primero
+            this.showAuthModal = true;
+            this.authMode = 'register';
+            return;
+          }
+
+          this.loading = true;
+          this.showPricing = false;
+
+          try {
+            // URL de suscripción de MercadoPago con el email del usuario
+            // Incluimos back_url para que vuelva a nuestra app
+            const backUrl = encodeURIComponent(window.location.origin + window.location.pathname + '?payment=success');
+            const mpSubscriptionUrl = `https://www.mercadopago.cl/subscriptions/checkout?preapproval_plan_id=44dd8dd8817944afb9d8f76c8b0a8f59&payer_email=${encodeURIComponent(this.user.email)}&back_url=${backUrl}`;
+
+            // Redirigir a MercadoPago
+            window.location.href = mpSubscriptionUrl;
+          } catch (error) {
+            console.error('MercadoPago error:', error);
+            alert('Error al procesar el pago. Intenta de nuevo.');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        // Check MercadoPago return
+        checkMercadoPagoReturn() {
+          const urlParams = new URLSearchParams(window.location.search);
+          const paymentStatus = urlParams.get('payment');
+          const preapprovalId = urlParams.get('preapproval_id');
+          const collectionStatus = urlParams.get('collection_status');
+
+          if (paymentStatus === 'success' || preapprovalId || collectionStatus === 'approved') {
+            // Usuario volvió de MercadoPago con pago exitoso
+            this.showPaymentSuccess = true;
+            this.paymentPending = true;
+
+            // Limpiar URL params
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            // Esperar un momento y verificar suscripción
+            setTimeout(async () => {
+              if (this.user) {
+                await this.checkSubscription();
+                if (this.isPro) {
+                  this.paymentPending = false;
+                }
+              }
+            }, 2000);
+          }
+        },
+
+        // Verificar suscripción manualmente (para el botón de refrescar)
+        async refreshSubscription() {
+          this.paymentPending = true;
+          await this.checkSubscription();
+          this.paymentPending = false;
+        },
+
+        // UI Helpers
+        getScoreColor(score) {
+          if (score >= 80) return '#22c55e';
+          if (score >= 60) return '#3b82f6';
+          if (score >= 40) return '#eab308';
+          return '#ef4444';
+        },
+
+        getFleschBarColor(score) {
+          if (score >= 60) return 'bg-green-500';
+          if (score >= 40) return 'bg-yellow-500';
+          return 'bg-red-500';
+        }
+      }));
+    });
+  </script>
+
+  <!-- Alpine.js - DEBE cargarse al final para que el componente esté registrado -->
+  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+</body>
+</html>
