@@ -506,9 +506,8 @@
                     </svg>
                     <span x-text="currentDocument.id ? 'Guardado' : 'Guardar'"></span>
                   </button>
-                  <!-- Fullscreen toggle (logged in users) -->
+                  <!-- Fullscreen toggle (available for all) -->
                   <button
-                    x-show="user"
                     @click="toggleFullscreen()"
                     class="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100"
                     :title="isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'"
@@ -543,7 +542,7 @@
                   class="px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
                   :class="viewMode === 'preview' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-slate-500 hover:text-slate-700'"
                 >
-                  Ver problemas
+                  Oportunidades
                   <!-- Issue count badge -->
                   <span
                     x-show="analysis?.summary?.total > 0"
@@ -552,10 +551,9 @@
                     :class="analysis?.summary?.total > 10 ? 'bg-red-500 text-white' : analysis?.summary?.total > 5 ? 'bg-yellow-400 text-yellow-900' : 'bg-blue-500 text-white'"
                   ></span>
                 </button>
-                <!-- AI Tab (logged in users) -->
+                <!-- AI Tab (visible for all) -->
                 <button
-                  x-show="user"
-                  @click="viewMode = 'ai'; loadAIPrompts()"
+                  @click="viewMode = 'ai'; if(user) loadAIPrompts()"
                   class="px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
                   :class="viewMode === 'ai' ? 'text-purple-600 border-b-2 border-purple-500' : 'text-slate-500 hover:text-slate-700'"
                 >
@@ -573,11 +571,11 @@
                 <textarea
                   x-show="viewMode === 'edit'"
                   x-model="text"
-                  @input="analyze()"
+                  @input="checkCommands(); analyze()"
                   @paste="handlePaste($event)"
                   class="editor-content w-full p-6 text-slate-800 text-lg resize-none border-0 focus:ring-0"
                   :class="{'opacity-50': !isPro && wordCount > 1000}"
-                  placeholder="Pega o escribe tu texto aquí..."
+                  placeholder="Pega o escribe tu texto aquí... (escribe /ayuda para ver formato)"
                   rows="12"
                 ></textarea>
 
@@ -641,8 +639,36 @@
                   x-cloak
                   class="p-6"
                 >
-                  <!-- AI Prompts Grid -->
-                  <div x-show="!aiSuggestion" class="space-y-4">
+                  <!-- Login Required Message (for non-logged users) -->
+                  <div x-show="!user" class="text-center py-16">
+                    <div class="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <svg class="w-10 h-10 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">Mejora tu texto con Kimi AI</h3>
+                    <p class="text-slate-500 mb-6 max-w-md mx-auto">
+                      Regístrate gratis para acceder al editor de IA que corrige, mejora y optimiza tu contenido automáticamente.
+                    </p>
+                    <div class="space-y-3 max-w-xs mx-auto">
+                      <button
+                        @click="showAuthModal = true; authMode = 'register'"
+                        class="w-full py-3 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 transition-colors"
+                      >
+                        Crear cuenta gratis
+                      </button>
+                      <button
+                        @click="showAuthModal = true; authMode = 'login'"
+                        class="w-full py-3 border border-slate-300 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors"
+                      >
+                        Ya tengo cuenta
+                      </button>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-4">Sin tarjeta de crédito · Acceso inmediato</p>
+                  </div>
+
+                  <!-- AI Prompts Grid (for logged users) -->
+                  <div x-show="user && !aiSuggestion" class="space-y-4">
                     <div class="flex items-center gap-2 mb-4">
                       <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -810,8 +836,8 @@
                     </div>
                   </div>
 
-                  <!-- AI Suggestion Result -->
-                  <div x-show="aiSuggestion" class="ai-suggestion space-y-4">
+                  <!-- AI Suggestion Result (logged users only) -->
+                  <div x-show="user && aiSuggestion" class="ai-suggestion space-y-4">
                     <div class="flex items-center justify-between">
                       <h3 class="text-lg font-semibold text-slate-800">Sugerencia de AI</h3>
                       <button
@@ -1433,6 +1459,215 @@
     </div>
   </div>
 
+  <!-- Quick Fix Issue Modal -->
+  <div
+    x-show="selectedIssue"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    @keydown.escape.window="selectedIssue = null"
+  >
+    <div class="absolute inset-0 bg-black/50 z-0" @click="selectedIssue = null"></div>
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+      <button
+        @click="selectedIssue = null"
+        class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <!-- Issue Header -->
+      <div class="mb-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span
+            class="w-3 h-3 rounded-full"
+            :class="{
+              'bg-green-400': selectedIssue?.category === 'passive',
+              'bg-blue-400': selectedIssue?.category === 'adverb',
+              'bg-purple-400': selectedIssue?.category === 'vague',
+              'bg-gray-400': selectedIssue?.category === 'filler',
+              'bg-yellow-400': selectedIssue?.category === 'long_sentence',
+              'bg-red-400': selectedIssue?.category === 'complex_sentence'
+            }"
+          ></span>
+          <h3 class="text-lg font-semibold text-slate-800" x-text="getCategoryLabel(selectedIssue?.category)"></h3>
+        </div>
+        <p class="text-sm text-slate-500">Selecciona cómo quieres corregir este problema</p>
+      </div>
+
+      <!-- Issue Text -->
+      <div class="bg-slate-50 rounded-xl p-4 mb-4">
+        <p class="text-slate-800 font-lora leading-relaxed" x-text="selectedIssue?.phrase || selectedIssue?.word || selectedIssue?.sentence"></p>
+      </div>
+
+      <!-- Quick Fix Options -->
+      <div class="space-y-2 mb-4">
+        <!-- Quick suggestion (non-AI) -->
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="text-sm font-medium text-amber-800">Sugerencia rápida</span>
+              <p class="text-sm text-amber-700" x-text="getSuggestion(selectedIssue)"></p>
+            </div>
+            <button
+              x-show="selectedIssue?.category === 'filler' || selectedIssue?.category === 'adverb'"
+              @click="applyQuickFix('remove')"
+              class="px-3 py-1.5 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 transition-colors"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Improvement Option -->
+      <div class="border-t border-slate-200 pt-4">
+        <button
+          @click="improveIssueWithAI()"
+          :disabled="aiLoading"
+          class="w-full py-3 bg-purple-600 text-white font-semibold rounded-xl hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          <svg x-show="!aiLoading" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <svg x-show="aiLoading" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <span x-text="aiLoading ? 'Mejorando con Kimi...' : 'Mejorar con Kimi AI'"></span>
+        </button>
+        <p class="text-xs text-slate-400 text-center mt-2">La IA reescribirá esta frase manteniendo el contexto</p>
+      </div>
+
+      <!-- AI Result (inline) -->
+      <div x-show="aiSuggestion && selectedIssue" class="mt-4 border-t border-slate-200 pt-4">
+        <div class="space-y-3">
+          <div class="bg-red-50 border border-red-200 rounded-xl p-3">
+            <span class="text-xs font-medium text-red-600">Original</span>
+            <p class="text-sm text-red-900 font-lora" x-text="aiSuggestion?.originalText"></p>
+          </div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-3">
+            <span class="text-xs font-medium text-green-600">Mejorado</span>
+            <p class="text-sm text-green-900 font-lora" x-text="aiSuggestion?.improvedText"></p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              @click="applyIssueFix()"
+              class="flex-1 py-2.5 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700 transition-colors"
+            >
+              Aplicar
+            </button>
+            <button
+              @click="aiSuggestion = null"
+              class="px-4 py-2.5 border border-slate-300 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition-colors"
+            >
+              Descartar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Markdown Help Modal -->
+  <div
+    x-show="showHelp"
+    x-cloak
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    @keydown.escape.window="showHelp = false"
+  >
+    <div class="absolute inset-0 bg-black/50 z-0" @click="showHelp = false"></div>
+    <div class="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+      <div class="p-6 border-b border-slate-200">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-bold text-slate-900">Guía de formato Markdown</h2>
+          <button
+            @click="showHelp = false"
+            class="text-slate-400 hover:text-slate-600"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <p class="text-sm text-slate-500 mt-1">Escribe <code class="bg-slate-100 px-1 rounded">/ayuda</code> en cualquier momento para ver esta guía</p>
+      </div>
+      <div class="p-6 overflow-y-auto max-h-[60vh]">
+        <div class="space-y-6 text-sm">
+          <!-- Headings -->
+          <div>
+            <h3 class="font-semibold text-slate-800 mb-2">Títulos</h3>
+            <div class="bg-slate-50 rounded-lg p-3 font-mono text-xs space-y-1">
+              <p># Título principal (H1)</p>
+              <p>## Subtítulo (H2)</p>
+              <p>### Sección (H3)</p>
+            </div>
+          </div>
+
+          <!-- Text formatting -->
+          <div>
+            <h3 class="font-semibold text-slate-800 mb-2">Formato de texto</h3>
+            <div class="bg-slate-50 rounded-lg p-3 font-mono text-xs space-y-1">
+              <p>**texto en negrita**</p>
+              <p>*texto en cursiva*</p>
+              <p>~~texto tachado~~</p>
+              <p>`código inline`</p>
+            </div>
+          </div>
+
+          <!-- Lists -->
+          <div>
+            <h3 class="font-semibold text-slate-800 mb-2">Listas</h3>
+            <div class="bg-slate-50 rounded-lg p-3 font-mono text-xs space-y-1">
+              <p>- Elemento de lista</p>
+              <p>- Otro elemento</p>
+              <p>&nbsp;&nbsp;- Sub-elemento (2 espacios)</p>
+              <p class="mt-2">1. Lista numerada</p>
+              <p>2. Segundo ítem</p>
+            </div>
+          </div>
+
+          <!-- Links -->
+          <div>
+            <h3 class="font-semibold text-slate-800 mb-2">Enlaces</h3>
+            <div class="bg-slate-50 rounded-lg p-3 font-mono text-xs">
+              <p>[texto del enlace](https://url.com)</p>
+            </div>
+          </div>
+
+          <!-- Blockquotes -->
+          <div>
+            <h3 class="font-semibold text-slate-800 mb-2">Citas</h3>
+            <div class="bg-slate-50 rounded-lg p-3 font-mono text-xs">
+              <p>> Esta es una cita</p>
+              <p>> Puede tener múltiples líneas</p>
+            </div>
+          </div>
+
+          <!-- Horizontal rule -->
+          <div>
+            <h3 class="font-semibold text-slate-800 mb-2">Línea horizontal</h3>
+            <div class="bg-slate-50 rounded-lg p-3 font-mono text-xs">
+              <p>---</p>
+            </div>
+          </div>
+
+          <!-- Tips -->
+          <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+            <h3 class="font-semibold text-purple-800 mb-2">💡 Tips</h3>
+            <ul class="text-purple-700 space-y-1 text-xs">
+              <li>• Usa dos saltos de línea para crear un nuevo párrafo</li>
+              <li>• Los títulos ayudan a estructurar tu contenido para SEO</li>
+              <li>• Las listas mejoran la legibilidad de instrucciones</li>
+              <li>• Usa negrita para destacar puntos clave</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Alpine.js App -->
   <script>
     // ===========================================
@@ -1443,6 +1678,9 @@
 
     // MercadoPago Configuration (Production credentials)
     const MP_PUBLIC_KEY = 'APP_USR-d63195d8-5211-412e-a57e-57b85a71c825';
+
+    // App URL for redirects (production)
+    const APP_URL = 'https://jeminguey.cacerola.cl';
 
     // Initialize Supabase client
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -1567,11 +1805,39 @@
 
     function findPassive(text) {
       const results = [];
-      const regex = /\b(es|fue|será|ha sido|han sido|fueron)\s+\w+(ado|ido|to|so|cho)\b/gi;
+
+      // Pattern 1: Pasiva perifrástica (ser + participio)
+      // Ejemplo: "fue creado", "es conocido", "será implementado", "son utilizados"
+      const serForms = 'es|son|soy|eres|somos|fue|fueron|fui|fuiste|fuimos|era|eran|será|serán|sería|serían|sea|sean|fuera|fueran|fuese|fuesen';
+      const participleEndings = 'ado|ada|ados|adas|ido|ida|idos|idas|to|ta|tos|tas|so|sa|sos|sas|cho|cha|chos|chas';
+      const passiveRegex = new RegExp(`\\b(${serForms})\\s+(?:\\w+\\s+)?(\\w+(?:${participleEndings}))\\b`, 'gi');
+
       let match;
-      while ((match = regex.exec(text)) !== null) {
+      while ((match = passiveRegex.exec(text)) !== null) {
         results.push({ phrase: match[0], index: match.index, category: 'passive' });
       }
+
+      // Pattern 2: Pasiva compuesta (haber sido + participio)
+      // Ejemplo: "ha sido creado", "han sido enviados", "había sido rechazado"
+      const haberSidoRegex = /\b(ha sido|han sido|he sido|has sido|hemos sido|había sido|habían sido|habrá sido|habrán sido|habría sido|habrían sido|haya sido|hayan sido|hubiera sido|hubieran sido)\s+(\w+(?:ado|ada|ados|adas|ido|ida|idos|idas|to|ta|tos|tas|so|sa|sos|sas|cho|cha|chos|chas))\b/gi;
+
+      while ((match = haberSidoRegex.exec(text)) !== null) {
+        // Evitar duplicados
+        if (!results.some(r => r.index === match.index)) {
+          results.push({ phrase: match[0], index: match.index, category: 'passive' });
+        }
+      }
+
+      // Pattern 3: Pasiva refleja común (se + verbo)
+      // Ejemplo: "se considera", "se realizó", "se han creado"
+      const reflexiveRegex = /\bse\s+(?:ha|han|había|habían)?\s*(dice|cree|considera|espera|recomienda|sugiere|piensa|sabe|puede|debe|necesita|requiere|observa|nota|encuentra|hace|realiza|llevó|obtuvo|logró|alcanzó|consiguió|creó|envió|recibió|utilizó|implementó|desarrolló|diseñó|construyó|estableció|determinó|decidió|aprobó|rechazó|aceptó|publicó|anunció|informó|reportó|detectó|identificó|descubrió|comprobó|verificó|confirmó|demostró|presentó|mostró|exhibió|expuso|propuso|planteó|formuló|elaboró|redactó|escribió|registró|documentó|archivó|guardó|almacenó|procesó|analizó|evaluó|revisó|corrigió|modificó|actualizó|mejoró|optimizó|resolvió|solucionó|arregló|reparó|instaló|configuró|activó|desactivó|habilitó|deshabilitó|autorizó|permitió|prohibió|restringió|limitó|canceló|suspendió|interrumpió|detuvo|finalizó|terminó|completó|concluyó|cerró|abrió|inició|comenzó|empezó|lanzó|ejecutó|aplicó|usó|empleó|ocupó|asignó|distribuyó|repartió|entregó|devolvió|transfirió|trasladó|movió|cambió|transformó|convirtió|adaptó|ajustó|organizó|ordenó|clasificó|categorizó|agrupó|separó|dividió|unió|combinó|integró|incorporó|añadió|agregó|incluyó|eliminó|removió|quitó|borró|suprimió|excluyó|omitió|ignoró|descartó|abandonó|dejó|mantuvo|conservó|preservó|protegió|resguardó|cuidó|atendió|trató|manejó|gestionó|administró|controló|supervisó|dirigió|coordinó|lideró|encabezó|representó|sustituyó|reemplazó|renovó|restauró|recuperó|rescató|salvó|liberó|soltó|disparó|lanzó|proyectó|calculó|estimó|midió|cuantificó|contó|sumó|restó|multiplicó|dividió|comparó|contrastó|diferenci|igualó|equiparó|balanceó|equilibró|compensó|pagó|cobró|facturó|cotizó|presupuestó|financió|invirtió|gastó|ahorró|depositó|retiró|prestó|debió|otorgó|concedió|donó|regaló|vendió|compró|adquirió|obtuvo|consiguió|ganó|perdió|apostó|arriesgó|aseguró|garantizó|prometió|comprometió|obligó|forzó|impuso|exigió|demandó|solicitó|pidió|rogó|suplicó|imploró|ordenó|mandó|instruyó|enseñó|capacitó|entrenó|formó|educó|instruyó|guió|orientó|aconsejó|asesoró|consultó|preguntó|cuestionó|interrogó|investigó|estudió|examinó|exploró|buscó|rastreó|localizó|ubicó|situó|colocó|puso|dispuso|preparó|alistó|equipó|proveyó|suministró|abasteci|surtió|llenó|vació|derramó|vertió|volcó|tiró|arrojó|lanzó|aventó|empujó|jaló|haló|arrastró|cargó|descargó|levantó|alzó|bajó|subió|ascendió|descendió|elevó|hundió|sumergió|flotó|navegó|voló|aterrizó|despegó|arrancó|frenó|aceleró|desaceleró|avanzó|retrocedió|giró|rotó|volteó|invirtió|revirtió|volvió|regresó|retornó|partió|salió|llegó|arribó|ingresó|entró|accedió|penetró|cruzó|atravesó|pasó|transcurrió|ocurrió|sucedió|aconteció|produjo|generó|originó|causó|provocó|desencadenó|activó|disparó|encendió|apagó|prendió|iluminó|oscureció|aclaró|explicó|definió|especificó|detalló|describió|narró|relató|contó|expresó|manifestó|declaró|afirmó|negó|refutó|contradijo|opuso|objetó|protestó|reclamó|quejó|criticó|censuró|condenó|reprobó|desaprobó|vetó|impugnó|apeló|recurrió|acudió|asistió|concurrió|participó|colaboró|cooperó|contribuyó|aportó|sumó|reunió|juntó|congregó|convocó|citó|llamó|contactó|comunicó|notificó|avisó|alertó|advirtió|previno|anticipó|predijo|pronosticó|vaticinó|auguró|presagió|intuyó|percibió|sintió|experimentó|vivió|sufrió|padeció|soportó|aguantó|toleró|resistió|enfrentó|confrontó|desafió|retó|amenazó|intimidó|asustó|atemorizó|espantó|horrorizó|aterró|escandalizó|sorprendió|impactó|impresionó|conmovió|emocionó|entusiasmó|alegró|entristeció|deprimió|angustió|preocupó|inquietó|alteró|perturbó|molestó|irritó|enfadó|enojó|enfureció|indignó|ofendió|humilló|avergonzó|deshonró|desprestigió|difamó|calumnió|injurió|insultó|agravió|dañó|perjudicó|lesionó|hirió|lastimó|maltrat|golpeó|pegó|atacó|agredió|asaltó|invadió|ocupó|conquistó|dominó|sometió|esclavizó|oprimió|explotó|abusó|violó|transgredió|infringió|incumplió|desobedeció|desafió|rebel|sublevó|amotinó|revolucionó|derrocó|derribó|tumbó|volcó|desestabilizó|perturbó|alteró|trastornó|desorganizó|desordenó|descontrol|caotiz|complicó|dificultó|obstaculizó|impidió|bloqueó|obstruyó|entorpeció|retrasó|atras|demoró|dilató|pospuso|aplazó|postergó|prolongó|extendió|ampli|agrand|expand|increment|aument|alz|elev|subi|crecí|desarroll|progres|mejor|perfeccion|pulí|refinó|afin|calibr|ajust|reguló|modul|sintoniz|armoniz|concili|reconcili|medi|arbitr|negoci|transigi|ced|conced|otorg|confiri|asign|adjudic|atribuy|imput|achac|culp|responsabiliz|acus|denunci|señal|indic|apunt|marc|rot|etiquet|catalog|clas|calific|puntu|evalu|valor|apreci|estim|juzg|sentenci|conten|fall|resolvi|decidi|determin|estableci|fij|design|nombr|eligi|seleccion|escogi|opt|prefiri|favoreci|benefici|premi|recompens|galardon|condecor|homenajeó|celebró|festejó|conmemoró|recordó|memoriz|aprendi|asimil|absorbi|incorpor|integr|fundi|fusion|mezclé|combin|bati|revolvió|agitó|sacudi|vibr|tembl|oscil|fluctuó|vari|cambi|alter|modific|transform|mutil|deform|distorsion|tergivers|falseó|adulteró|falsific|fragu|manip|manej|oper|funcion|trabaj|labor|desempeñ|ejerci|practic|realiz|efectu|ejecut|llev|condujo|dirig|orient|encamin|encauz|canaliz|vehicul|transmiti|difundi|propag|divulg|public|emiti|radi|televisó|retransmiti|reprodujo|copi|imit|plag|pirate|rob|hurt|sustrajo|arrebató|despoj|expropi|confiscó|requisó|incaut|embarg|subast|remat|liquid|vendi|comercializ|mercade|promocion|publicit|anunci|propag|difundi|dispers|espaci|separ|distanci|alej|apart|aisl|incomunic|bloque|cerr|clausur|suscribi|afili|inscribi|registr|enrol|alist|recult|convoc|congre|reuni|junt|concentr|aglomer|amontonó|apil|acumul|almacen|deposit|guard|reserv|apart|destin|asign|dedic|consagr|sacrific|inmol|ofrend|rind|tribut|honor|respet|vener|ador|ídolatr|diviniz|santific|beatific|canoniz|glorific|magnificó|exalt|enalteci|sublim|ide|romantiz|embelleci|adorn|decor|engalan|ornament|atavi|visti|arrop|abrig|cubri|tap|protegi|resguard|refugi|cobij|ampar|auxili|socorri|ayud|asisti|colabor|cooper|particip|intervini|medi|arbitr|negoci|dialog|convers|platic|chart|habl|coment|observ|not|repar|percibi|distingui|diferenció|discrimi|segreg|margin|excluí|rechaz|despidi|despach|ech|expuls|desaloj|desplaz|reubic|relocaliz|traslad|transport|acarreo|llev|trajo|conduj|acompañ|escolt|guí|dirig|orient|enrumb|desví|apart|separ|dividi|fragment|parcel|lot|distribuí|reparti|entreg|suministr|abasteci|proveí|equip|dot|instrument|armó|pertrechó|municion|fortific|atrincheró|acuartel|aloj|hosped|acog|recibió|admiti|acept|aprob|valid|certific|acredit|homolog|legaliz|legitim|autoriz|permiti|consent|toler|aguant|soport|resist|opu|enfrent|combatig|lucho|pele|contest|disput|debat|polemic|controviert|cuestion|objet|impugn|rechaz|repudi|repel|repulso|desestim|menosprei|subvalor|subestim|descuid|dej|abandon|desist|renunci|abdic|dimiti|retir|jubil|pension|prejubil|indemniz|compens|resarci|reparó|subsanó|enmendó|rectific|corrigi|reform|revis|reelabor|reescribi|redact|transcribi|copi|reproduj|replic|duplic|multiplic|propag|disemin|esparci|roci|salpi|moj|humedeci|empap|impregnó|saturó|colm|llen|rebos|desbord|derram|verti|volc|tir|arroj|lanz|dispar|detong|estalló|explot|revent|rompió)\b/gi;
+
+      while ((match = reflexiveRegex.exec(text)) !== null) {
+        if (!results.some(r => r.index === match.index)) {
+          results.push({ phrase: match[0], index: match.index, category: 'passive' });
+        }
+      }
+
       return results;
     }
 
@@ -1757,6 +2023,7 @@
         showPricing: false,
         showDocuments: false,
         showAdminPanel: false,
+        showHelp: false, // Markdown help modal
         isFullscreen: false,
         authMode: 'login',
         authEmail: '',
@@ -1777,6 +2044,8 @@
         adminPrompts: [],
         aiLoading: false,
         aiSuggestion: null,
+        selectedIssue: null, // Issue selected for quick fix
+        highlightedIssues: [], // Issues array for click handling
 
         // Content type configs
         contentTypes: {
@@ -1810,6 +2079,22 @@
 
         // Initialize
         async init() {
+          // Listen for issue clicks from highlighted text
+          window.addEventListener('issue-click', (e) => {
+            const idx = e.detail;
+            if (this.highlightedIssues[idx]) {
+              // If not logged in, prompt to register
+              if (!this.user) {
+                this.showAuthModal = true;
+                this.authMode = 'register';
+                return;
+              }
+              // Show issue modal for logged in users
+              this.selectedIssue = this.highlightedIssues[idx];
+              this.aiSuggestion = null; // Reset any previous AI suggestion
+            }
+          });
+
           // Check for MercadoPago return params
           this.checkMercadoPagoReturn();
 
@@ -2058,20 +2343,31 @@
                 .eq('id', this.currentDocument.id);
 
               if (error) throw error;
+
+              // Update local list without reloading
+              const idx = this.documents.findIndex(d => d.id === this.currentDocument.id);
+              if (idx !== -1) {
+                this.documents[idx] = { ...this.documents[idx], ...docData, updated_at: new Date().toISOString() };
+              }
             } else {
               // Create new document
               const { data, error } = await supabaseClient
                 .from('documents')
                 .insert(docData)
-                .select()
+                .select('id, created_at, updated_at')
                 .single();
 
               if (error) throw error;
               this.currentDocument.id = data.id;
-            }
 
-            // Refresh documents list
-            await this.loadDocuments();
+              // Add to local list without reloading
+              this.documents.unshift({
+                ...docData,
+                id: data.id,
+                created_at: data.created_at,
+                updated_at: data.updated_at
+              });
+            }
           } catch (err) {
             console.error('Error saving document:', err);
             alert('Error al guardar el documento');
@@ -2379,6 +2675,135 @@
           }
         },
 
+        // Improve specific issue with AI
+        async improveIssueWithAI() {
+          if (!this.user) {
+            this.showAuthModal = true;
+            this.authMode = 'register';
+            return;
+          }
+
+          if (!this.selectedIssue) return;
+
+          const issueText = this.selectedIssue.phrase || this.selectedIssue.word || this.selectedIssue.sentence;
+          if (!issueText) return;
+
+          this.aiLoading = true;
+
+          try {
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+
+            if (!accessToken) {
+              throw new Error('No hay sesión activa');
+            }
+
+            // Get surrounding context (up to 500 chars before and after)
+            const issueIndex = this.selectedIssue.index || 0;
+            const contextStart = Math.max(0, issueIndex - 500);
+            const contextEnd = Math.min(this.text.length, issueIndex + issueText.length + 500);
+            const context = this.text.substring(contextStart, contextEnd);
+
+            // Build prompt with context
+            const categoryLabel = this.getCategoryLabel(this.selectedIssue.category);
+            const suggestion = this.getSuggestion(this.selectedIssue);
+
+            const textToProcess = `CONTEXTO:\n${context}\n\n---\n\nPROBLEMA DETECTADO (${categoryLabel}):\n"${issueText}"\n\nSUGERENCIA: ${suggestion}\n\nReescribe SOLO la frase problemática de forma mejorada. Responde únicamente con el texto corregido, sin explicaciones.`;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+            const response = await fetch('https://kwcfnxvzmnximesrslua.supabase.co/functions/v1/ai-editor', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
+              },
+              body: JSON.stringify({
+                text: textToProcess,
+                promptName: 'improve_selection'
+              }),
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Error en la respuesta');
+            }
+
+            const data = await response.json();
+
+            this.aiSuggestion = {
+              originalText: issueText,
+              improvedText: data.improvedText?.trim() || '',
+              promptUsed: 'improve_issue'
+            };
+          } catch (err) {
+            console.error('AI issue improvement error:', err);
+            if (err.name === 'AbortError') {
+              alert('Timeout. Intenta de nuevo.');
+            } else {
+              alert('Error: ' + err.message);
+            }
+          } finally {
+            this.aiLoading = false;
+          }
+        },
+
+        // Apply quick fix (remove word/phrase)
+        applyQuickFix(action) {
+          if (!this.selectedIssue) return;
+
+          const issueText = this.selectedIssue.phrase || this.selectedIssue.word || '';
+          if (!issueText) return;
+
+          if (action === 'remove') {
+            // Remove the word/phrase from text
+            const index = this.selectedIssue.index;
+            const before = this.text.substring(0, index);
+            const after = this.text.substring(index + issueText.length);
+
+            // Clean up extra spaces
+            this.text = (before.trimEnd() + ' ' + after.trimStart()).replace(/\s+/g, ' ').trim();
+
+            // Close modal and re-analyze
+            this.selectedIssue = null;
+            this.analyze();
+
+            // Auto-save if document exists
+            if (this.currentDocument.id) {
+              this.saveDocument();
+            }
+          }
+        },
+
+        // Apply AI fix for specific issue
+        applyIssueFix() {
+          if (!this.aiSuggestion?.improvedText || !this.selectedIssue) return;
+
+          const originalText = this.aiSuggestion.originalText;
+          const improvedText = this.aiSuggestion.improvedText;
+
+          // Replace the original text with improved text
+          const index = this.selectedIssue.index;
+          const before = this.text.substring(0, index);
+          const after = this.text.substring(index + originalText.length);
+
+          this.text = before + improvedText + after;
+
+          // Close modal and re-analyze
+          this.selectedIssue = null;
+          this.aiSuggestion = null;
+          this.analyze();
+
+          // Auto-save if document exists
+          if (this.currentDocument.id) {
+            this.saveDocument();
+          }
+        },
+
         // Quick fix all issues with AI
         async fixAllWithAI() {
           if (!this.user) {
@@ -2490,12 +2915,13 @@
               });
             }
 
-            // Add the marked segment
+            // Add the marked segment with issue data
             segments.push({
               type: 'mark',
               content: text.substring(start, end),
               colorClass: this.getCategoryClass(issue.category),
-              tooltip: this.getTooltip(issue)
+              tooltip: this.getTooltip(issue),
+              issue: issue // Store full issue for click handler
             });
 
             lastIndex = end;
@@ -2509,19 +2935,26 @@
             });
           }
 
-          // Build HTML from segments
+          // Build HTML from segments and store issues for click handler
+          this.highlightedIssues = [];
           let html = '';
+          let issueIndex = 0;
+
           for (const seg of segments) {
             if (seg.type === 'text') {
               html += this.renderMarkdown(seg.content);
             } else {
+              // Store issue for click handler
+              this.highlightedIssues.push(seg.issue);
+
               // For marks, escape HTML but preserve line breaks
               const escaped = seg.content
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/\n/g, '<br>');
-              html += `<mark class="${seg.colorClass}" data-tip="${seg.tooltip}">${escaped}</mark>`;
+              html += `<mark class="${seg.colorClass} cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-slate-400" data-tip="${seg.tooltip}" data-issue-idx="${issueIndex}" onclick="window.dispatchEvent(new CustomEvent('issue-click', {detail: ${issueIndex}}))">${escaped}</mark>`;
+              issueIndex++;
             }
           }
 
@@ -2544,11 +2977,20 @@
 
         // Get tooltip text with specific suggestion
         getTooltip(issue) {
+          const categoryLabel = this.getCategoryLabel(issue.category);
           const suggestion = this.getSuggestion(issue);
-          if (suggestion) {
-            return `${this.getCategoryLabel(issue.category)} → ${suggestion}`;
+
+          // Different tooltip based on user state
+          if (!this.user) {
+            // Not logged in - invite to register
+            return `${categoryLabel} · Click para corregir gratis`;
           }
-          return this.getCategoryLabel(issue.category);
+
+          // Logged in - show suggestion with AI option
+          if (suggestion) {
+            return `${categoryLabel} → ${suggestion} · Click para mejorar`;
+          }
+          return `${categoryLabel} · Click para mejorar con AI`;
         },
 
         // Get category label
@@ -2855,6 +3297,15 @@
           return html;
         },
 
+        // Check for slash commands in text
+        checkCommands() {
+          // Check for /ayuda command
+          if (this.text.includes('/ayuda')) {
+            this.text = this.text.replace('/ayuda', '').trim();
+            this.showHelp = true;
+          }
+        },
+
         // Clear text
         clearText() {
           this.text = '';
@@ -2876,7 +3327,7 @@
                 email: this.authEmail,
                 password: this.authPassword,
                 options: {
-                  emailRedirectTo: window.location.origin
+                  emailRedirectTo: APP_URL
                 }
               });
 
