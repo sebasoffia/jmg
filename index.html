@@ -2689,8 +2689,12 @@
           if (!issueText) return;
 
           this.aiLoading = true;
+          const startTime = performance.now();
 
           try {
+            console.log('🚀 [AI] Iniciando mejora de issue...');
+            console.log('🔤 [AI] Texto a mejorar:', issueText);
+
             const { data: sessionData } = await supabaseClient.auth.getSession();
             const accessToken = sessionData?.session?.access_token;
 
@@ -2708,8 +2712,14 @@
             const suggestion = this.getSuggestion(this.selectedIssue);
             const textToProcess = `Contexto: "${context}"\n\nMejora esta frase: "${issueText}"\nProblema: ${suggestion}\n\nResponde SOLO con la frase corregida:`;
 
+            console.log('📝 [AI] Prompt enviado:', textToProcess);
+            console.log('📊 [AI] Tamaño prompt:', textToProcess.length, 'chars');
+
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            console.log('⏱️ [AI] Enviando request a Edge Function...');
+            const fetchStart = performance.now();
 
             const response = await fetch('https://kwcfnxvzmnximesrslua.supabase.co/functions/v1/ai-editor', {
               method: 'POST',
@@ -2725,13 +2735,19 @@
             });
 
             clearTimeout(timeoutId);
+            const fetchTime = ((performance.now() - fetchStart) / 1000).toFixed(2);
+            console.log(`⏱️ [AI] Response recibido en ${fetchTime}s`);
 
             if (!response.ok) {
               const errorData = await response.json();
+              console.error('❌ [AI] Error response:', errorData);
               throw new Error(errorData.error || 'Error en la respuesta');
             }
 
             const data = await response.json();
+            const totalTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            console.log('✅ [AI] Respuesta:', data);
+            console.log(`✅ [AI] Tiempo total: ${totalTime}s`);
 
             this.aiSuggestion = {
               originalText: issueText,
