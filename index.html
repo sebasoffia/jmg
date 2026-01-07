@@ -2282,25 +2282,30 @@
           }
         },
 
-        // Helper: obtener token fresco (refresca si es necesario)
+        // Helper: obtener token fresco con timeout
         async getValidAccessToken() {
-          try {
-            // Intentar refrescar la sesión
-            const { data, error } = await supabaseClient.auth.refreshSession();
-            if (error) {
-              console.warn('Token refresh failed:', error);
-              // Fallback al token guardado
-              return this.accessToken;
+          console.log('🔐 [AUTH] Obteniendo token, actual:', !!this.accessToken);
+
+          // Si ya tenemos token, usarlo directamente (el refresh es opcional)
+          if (this.accessToken) {
+            // Intentar refresh en background con timeout corto
+            try {
+              const refreshPromise = supabaseClient.auth.refreshSession();
+              const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Timeout')), 3000)
+              );
+
+              const { data } = await Promise.race([refreshPromise, timeoutPromise]);
+              if (data?.session?.access_token) {
+                this.accessToken = data.session.access_token;
+                console.log('🔐 [AUTH] Token refrescado');
+              }
+            } catch (e) {
+              console.log('🔐 [AUTH] Refresh skip (usando token existente)');
             }
-            if (data?.session?.access_token) {
-              this.accessToken = data.session.access_token;
-              return data.session.access_token;
-            }
-            return this.accessToken;
-          } catch (e) {
-            console.warn('Error refreshing token:', e);
-            return this.accessToken;
           }
+
+          return this.accessToken;
         },
 
         // Toggle fullscreen mode
