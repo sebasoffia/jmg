@@ -2816,11 +2816,12 @@
             console.log('⏱️ [AI] Enviando request a Edge Function...');
             const fetchStart = performance.now();
 
-            const response = await fetch('https://kwcfnxvzmnximesrslua.supabase.co/functions/v1/ai-editor', {
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-editor`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`
+                'Authorization': `Bearer ${accessToken}`,
+                'apikey': SUPABASE_ANON_KEY
               },
               body: JSON.stringify({
                 text: textToProcess,
