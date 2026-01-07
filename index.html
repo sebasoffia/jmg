@@ -2698,20 +2698,18 @@
               throw new Error('No hay sesión activa');
             }
 
-            // Get surrounding context (up to 500 chars before and after)
+            // Get minimal surrounding context (200 chars)
             const issueIndex = this.selectedIssue.index || 0;
-            const contextStart = Math.max(0, issueIndex - 500);
-            const contextEnd = Math.min(this.text.length, issueIndex + issueText.length + 500);
+            const contextStart = Math.max(0, issueIndex - 150);
+            const contextEnd = Math.min(this.text.length, issueIndex + issueText.length + 150);
             const context = this.text.substring(contextStart, contextEnd);
 
-            // Build prompt with context
-            const categoryLabel = this.getCategoryLabel(this.selectedIssue.category);
+            // Build concise prompt
             const suggestion = this.getSuggestion(this.selectedIssue);
-
-            const textToProcess = `CONTEXTO:\n${context}\n\n---\n\nPROBLEMA DETECTADO (${categoryLabel}):\n"${issueText}"\n\nSUGERENCIA: ${suggestion}\n\nReescribe SOLO la frase problemática de forma mejorada. Responde únicamente con el texto corregido, sin explicaciones.`;
+            const textToProcess = `Contexto: "${context}"\n\nMejora esta frase: "${issueText}"\nProblema: ${suggestion}\n\nResponde SOLO con la frase corregida:`;
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000);
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
 
             const response = await fetch('https://kwcfnxvzmnximesrslua.supabase.co/functions/v1/ai-editor', {
               method: 'POST',
@@ -3011,6 +3009,8 @@
 
         // Generate specific suggestion for an issue
         getSuggestion(issue) {
+          if (!issue) return '';
+
           const text = issue.word || issue.phrase || '';
           const lower = text.toLowerCase();
 
