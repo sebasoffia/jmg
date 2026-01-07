@@ -581,14 +581,50 @@
                   rows="12"
                 ></textarea>
 
-                <!-- Preview Mode: Highlighted Text -->
+                <!-- Preview Mode: Highlighted Text with Selection -->
                 <div
                   x-show="viewMode === 'preview'"
                   x-cloak
-                  class="editor-content w-full p-6 text-slate-800 text-lg overflow-auto"
-                  style="min-height: 300px; max-height: 500px; white-space: pre-wrap;"
-                  x-html="highlightedText"
-                ></div>
+                  class="relative"
+                  x-data="{ selectedText: '', selectionPos: null }"
+                  @mouseup="
+                    const selection = window.getSelection();
+                    const text = selection.toString().trim();
+                    if (text.length > 5) {
+                      selectedText = text;
+                      const range = selection.getRangeAt(0);
+                      const rect = range.getBoundingClientRect();
+                      selectionPos = { x: rect.left + rect.width / 2, y: rect.top - 10 };
+                    } else {
+                      selectedText = '';
+                      selectionPos = null;
+                    }
+                  "
+                >
+                  <!-- Floating AI Button on Selection -->
+                  <div
+                    x-show="selectedText && selectionPos"
+                    x-cloak
+                    class="fixed z-50 transform -translate-x-1/2 -translate-y-full"
+                    :style="`left: ${selectionPos?.x}px; top: ${selectionPos?.y}px;`"
+                  >
+                    <button
+                      @click="$dispatch('improve-selection', { text: selectedText }); selectedText = ''; selectionPos = null;"
+                      class="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg shadow-lg hover:bg-purple-700 transition-colors"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Mejorar con AI
+                    </button>
+                  </div>
+
+                  <div
+                    class="editor-content w-full p-6 text-slate-800 text-lg overflow-auto"
+                    style="min-height: 300px; max-height: 500px; white-space: pre-wrap;"
+                    x-html="highlightedText"
+                  ></div>
+                </div>
 
                 <!-- Empty State for Preview -->
                 <div
@@ -1838,6 +1874,83 @@
               this.isFullscreen = false;
             }
           });
+
+          // Listen for text selection AI improvement
+          window.addEventListener('improve-selection', (e) => {
+            const selectedText = e.detail?.text;
+            if (selectedText) {
+              this.improveSelectedText(selectedText);
+            }
+          });
+        },
+
+        // Improve only selected text with AI (fast, focused)
+        async improveSelectedText(selectedText) {
+          if (!selectedText || selectedText.length < 5) return;
+
+          if (!this.user) {
+            this.showAuthModal = true;
+            return;
+          }
+
+          this.aiLoading = true;
+          this.viewMode = 'ai';
+          this.aiSuggestion = null;
+
+          try {
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+
+            if (!accessToken) {
+              throw new Error('No hay sesión activa');
+            }
+
+            console.log(`AI improving selection: ${selectedText.length} chars`);
+            const startTime = performance.now();
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-editor`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY
+              },
+              body: JSON.stringify({
+                text: selectedText,
+                promptName: 'improve_selection',
+                issues: []
+              }),
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+            const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+
+            const data = await response.json();
+            console.log(`AI selection response in ${elapsed}s:`, data);
+
+            if (!response.ok) {
+              throw new Error(data.error || 'Error al procesar');
+            }
+
+            this.aiSuggestion = {
+              originalText: selectedText,
+              improvedText: data.improvedText,
+              promptUsed: 'improve_selection'
+            };
+          } catch (err) {
+            console.error('AI selection error:', err);
+            if (err.name === 'AbortError') {
+              alert('Timeout. Intenta con menos texto.');
+            } else {
+              alert('Error: ' + err.message);
+            }
+          } finally {
+            this.aiLoading = false;
+          }
         },
 
         // Check user subscription from Supabase
@@ -2429,18 +2542,109 @@
           return classes[category] || 'highlight-vague';
         },
 
-        // Get tooltip text for issue
+        // Get tooltip text with specific suggestion
         getTooltip(issue) {
-          const tips = {
-            passive: 'Voz pasiva - considera usar voz activa',
-            adverb: 'Adverbio - intenta ser más específico',
-            vague: 'Palabra débil - busca una alternativa más precisa',
-            intensifier: 'Intensificador - elimínalo o usa datos concretos',
-            filler: 'Muletilla - puedes eliminarlo',
-            long_sentence: `Oración larga (${issue.wordCount} palabras) - considera dividirla`,
-            complex_sentence: `Oración muy compleja (${issue.wordCount} palabras) - simplifica`
+          const suggestion = this.getSuggestion(issue);
+          if (suggestion) {
+            return `${this.getCategoryLabel(issue.category)} → ${suggestion}`;
+          }
+          return this.getCategoryLabel(issue.category);
+        },
+
+        // Get category label
+        getCategoryLabel(category) {
+          const labels = {
+            passive: '🟢 Voz pasiva',
+            adverb: '🔵 Adverbio',
+            vague: '🟣 Palabra débil',
+            intensifier: '🟣 Intensificador',
+            filler: '⚪ Muletilla',
+            long_sentence: '🟡 Oración larga',
+            complex_sentence: '🔴 Muy compleja'
           };
-          return tips[issue.category] || 'Revisa este texto';
+          return labels[category] || 'Revisar';
+        },
+
+        // Generate specific suggestion for an issue
+        getSuggestion(issue) {
+          const text = issue.word || issue.phrase || '';
+          const lower = text.toLowerCase();
+
+          // Adverbs - suggest removal or specific alternatives
+          if (issue.category === 'adverb') {
+            const alternatives = {
+              'realmente': 'eliminar o usar dato concreto',
+              'muy': 'eliminar o cuantificar',
+              'bastante': 'eliminar o especificar',
+              'totalmente': 'eliminar',
+              'completamente': 'eliminar',
+              'absolutamente': 'eliminar',
+              'obviamente': 'eliminar',
+              'claramente': 'eliminar',
+              'simplemente': 'eliminar',
+              'básicamente': 'eliminar',
+              'literalmente': 'eliminar',
+              'prácticamente': 'casi / eliminar',
+              'generalmente': 'suele / a menudo',
+              'normalmente': 'suele / habitualmente',
+              'probablemente': 'quizás / es posible que',
+              'seguramente': 'es probable que',
+              'definitivamente': 'sin duda',
+              'extremadamente': 'muy / eliminar',
+              'increíblemente': 'eliminar o especificar'
+            };
+            return alternatives[lower] || 'considera eliminar';
+          }
+
+          // Vague words - suggest specific alternatives
+          if (issue.category === 'vague') {
+            const alternatives = {
+              'cosa': 'especificar qué',
+              'cosas': 'especificar cuáles',
+              'algo': 'especificar qué',
+              'mucho': 'cuantificar',
+              'muchos': 'cuantificar',
+              'poco': 'cuantificar',
+              'pocos': 'cuantificar',
+              'bueno': 'especificar por qué',
+              'malo': 'especificar por qué',
+              'grande': 'cuantificar tamaño',
+              'pequeño': 'cuantificar tamaño',
+              'importante': 'explicar por qué',
+              'interesante': 'explicar por qué',
+              'etc': 'completar la lista',
+              'etcétera': 'completar la lista'
+            };
+            return alternatives[lower] || 'ser más específico';
+          }
+
+          // Passive voice - suggest active form
+          if (issue.category === 'passive') {
+            // Simple pattern matching for common passive constructions
+            if (lower.includes('fue ')) return 'usar verbo activo';
+            if (lower.includes('es ')) return 'usar verbo activo';
+            if (lower.includes('son ')) return 'usar verbo activo';
+            if (lower.includes('fueron ')) return 'usar verbo activo';
+            if (lower.includes('ha sido')) return 'usar verbo activo';
+            if (lower.includes('han sido')) return 'usar verbo activo';
+            return 'convertir a voz activa';
+          }
+
+          // Fillers - suggest removal
+          if (issue.category === 'filler') {
+            return 'eliminar';
+          }
+
+          // Long sentences - suggest splitting
+          if (issue.category === 'long_sentence') {
+            return `${issue.wordCount} palabras → dividir en 2`;
+          }
+
+          if (issue.category === 'complex_sentence') {
+            return `${issue.wordCount} palabras → simplificar`;
+          }
+
+          return null;
         },
 
         // Escape HTML special characters

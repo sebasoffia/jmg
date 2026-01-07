@@ -67,15 +67,29 @@ serve(async (req) => {
       )
     }
 
-    // Obtener el prompt de la base de datos
-    const { data: prompt, error: promptError } = await supabaseClient
+    // Fallback prompts for quick operations (no DB needed)
+    const fallbackPrompts: Record<string, { system_prompt: string; user_prompt_template: string }> = {
+      'improve_selection': {
+        system_prompt: 'Eres un editor de texto en español. Tu tarea es mejorar el texto proporcionado manteniendo su significado original. Hazlo más claro, conciso y profesional. Solo responde con el texto mejorado, sin explicaciones.',
+        user_prompt_template: 'Mejora este texto:\n\n{{text}}'
+      }
+    }
+
+    // Try to get prompt from database first
+    let prompt = fallbackPrompts[promptName] || null
+
+    const { data: dbPrompt, error: promptError } = await supabaseClient
       .from('ai_prompts')
       .select('*')
       .eq('name', promptName)
       .eq('is_active', true)
       .single()
 
-    if (promptError || !prompt) {
+    if (dbPrompt) {
+      prompt = dbPrompt
+    }
+
+    if (!prompt) {
       return new Response(
         JSON.stringify({ error: 'Prompt no encontrado' }),
         {
