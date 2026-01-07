@@ -1463,7 +1463,8 @@
   <div
     x-show="selectedIssue"
     x-cloak
-    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    class="fixed inset-0 flex items-center justify-center p-4"
+    style="z-index: 10000;"
     @keydown.escape.window="selectedIssue = null"
   >
     <div class="absolute inset-0 bg-black/50 z-0" @click="selectedIssue = null"></div>
@@ -2104,6 +2105,7 @@
 
           if (session?.user) {
             this.user = session.user;
+            this.accessToken = session.access_token; // Guardar token al inicio
             // Check subscription status and admin status
             await this.checkSubscription();
             await this.checkAdminStatus();
@@ -2185,11 +2187,11 @@
           this.aiSuggestion = null;
 
           try {
-            const { data: sessionData } = await supabaseClient.auth.getSession();
-            const accessToken = sessionData?.session?.access_token;
+            // Usar token guardado
+            const accessToken = this.accessToken;
 
             if (!accessToken) {
-              throw new Error('No hay sesión activa');
+              throw new Error('No hay sesión activa - refresca la página');
             }
 
             console.log(`AI improving selection: ${selectedText.length} chars`);
@@ -2629,12 +2631,11 @@
               });
             }
 
-            // Obtener token de sesión
-            const { data: sessionData } = await supabaseClient.auth.getSession();
-            const accessToken = sessionData?.session?.access_token;
+            // Usar token guardado
+            const accessToken = this.accessToken;
 
             if (!accessToken) {
-              throw new Error('No hay sesión activa. Por favor inicia sesión nuevamente.');
+              throw new Error('No hay sesión activa - refresca la página');
             }
 
             // OPTIMIZATION: Send full text for context + mark specific fragments to fix
@@ -2762,11 +2763,12 @@
             console.log('🚀 [AI] Iniciando mejora de issue...');
             console.log('🔤 [AI] Texto a mejorar:', issueText);
 
-            const { data: sessionData } = await supabaseClient.auth.getSession();
-            const accessToken = sessionData?.session?.access_token;
+            // Usar token guardado (evita getSession que cuelga)
+            const accessToken = this.accessToken;
+            console.log('🔑 [AI] Token existe:', !!accessToken);
 
             if (!accessToken) {
-              throw new Error('No hay sesión activa');
+              throw new Error('No hay sesión activa - refresca la página');
             }
 
             // Get minimal surrounding context (200 chars)
