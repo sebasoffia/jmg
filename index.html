@@ -2187,8 +2187,8 @@
           this.aiSuggestion = null;
 
           try {
-            // Usar token guardado
-            const accessToken = this.accessToken;
+            // Obtener token fresco
+            const accessToken = await this.getValidAccessToken();
 
             if (!accessToken) {
               throw new Error('No hay sesión activa - refresca la página');
@@ -2279,6 +2279,27 @@
             this.isAdmin = !!data;
           } catch {
             // Silently ignore - table may not exist
+          }
+        },
+
+        // Helper: obtener token fresco (refresca si es necesario)
+        async getValidAccessToken() {
+          try {
+            // Intentar refrescar la sesión
+            const { data, error } = await supabaseClient.auth.refreshSession();
+            if (error) {
+              console.warn('Token refresh failed:', error);
+              // Fallback al token guardado
+              return this.accessToken;
+            }
+            if (data?.session?.access_token) {
+              this.accessToken = data.session.access_token;
+              return data.session.access_token;
+            }
+            return this.accessToken;
+          } catch (e) {
+            console.warn('Error refreshing token:', e);
+            return this.accessToken;
           }
         },
 
@@ -2387,9 +2408,9 @@
               console.log('💾 [SAVE] user_id:', this.user.id);
               const opStart = performance.now();
 
-              // Usar token guardado (evita getSession que cuelga)
-              const accessToken = this.accessToken;
-              console.log('💾 [SAVE] Token existe:', !!accessToken);
+              // Obtener token fresco
+              const accessToken = await this.getValidAccessToken();
+              console.log('💾 [SAVE] Token obtenido:', !!accessToken);
 
               if (!accessToken) {
                 throw new Error('No hay sesión activa - refresca la página');
@@ -2631,8 +2652,8 @@
               });
             }
 
-            // Usar token guardado
-            const accessToken = this.accessToken;
+            // Obtener token fresco
+            const accessToken = await this.getValidAccessToken();
 
             if (!accessToken) {
               throw new Error('No hay sesión activa - refresca la página');
@@ -2763,9 +2784,9 @@
             console.log('🚀 [AI] Iniciando mejora de issue...');
             console.log('🔤 [AI] Texto a mejorar:', issueText);
 
-            // Usar token guardado (evita getSession que cuelga)
-            const accessToken = this.accessToken;
-            console.log('🔑 [AI] Token existe:', !!accessToken);
+            // Obtener token fresco
+            const accessToken = await this.getValidAccessToken();
+            console.log('🔑 [AI] Token obtenido:', !!accessToken);
 
             if (!accessToken) {
               throw new Error('No hay sesión activa - refresca la página');
