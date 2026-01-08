@@ -2387,22 +2387,34 @@
             console.log('💾 [SAVE] Payload size:', payloadSize, 'bytes');
 
             if (this.currentDocument.id) {
-              // Update existing document
+              // Update existing document - fetch directo
               console.log('💾 [SAVE] Actualizando doc:', this.currentDocument.id);
               const opStart = performance.now();
 
-              const { error } = await withTimeout(
-                supabaseClient
-                  .from('documents')
-                  .update(docData)
-                  .eq('id', this.currentDocument.id),
-                15000 // 15s timeout
+              const accessToken = await this.getValidAccessToken();
+              if (!accessToken) throw new Error('No hay sesión activa - refresca la página');
+
+              const response = await withTimeout(
+                fetch(`${SUPABASE_URL}/rest/v1/documents?id=eq.${this.currentDocument.id}`, {
+                  method: 'PATCH',
+                  headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                  },
+                  body: JSON.stringify(docData)
+                }),
+                15000
               );
 
               console.log(`💾 [SAVE] Update en ${((performance.now() - opStart) / 1000).toFixed(2)}s`);
-              if (error) throw error;
+              if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errText}`);
+              }
 
-              // Update local list without reloading
+              // Update local list
               const idx = this.documents.findIndex(d => d.id === this.currentDocument.id);
               if (idx !== -1) {
                 this.documents[idx] = { ...this.documents[idx], ...docData, updated_at: new Date().toISOString() };
